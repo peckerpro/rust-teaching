@@ -337,6 +337,7 @@ dependencies = [
 name = "rt-cli"
 version = "0.1.0"
 dependencies = [
+ "ariadne",
  "clap",
  "inkwell",
  "rt-ast",
@@ -347,7 +348,6 @@ dependencies = [
  "rt-parser",
  "rt-semantic",
  "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

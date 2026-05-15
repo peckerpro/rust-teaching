@@ -60,7 +60,7 @@ impl<'a> TypeChecker<'a> {
                 if let Some(body) = &fn_item.body {
                     let ret_ty = fn_item.ret_ty.as_ref()
                         .map(|t| self.ast_ty_to_sem(t));
-                    let mut fn_scope = Scope::child(self.local_scope.clone());
+                    let mut fn_scope = Scope::child(&self.local_scope);
                     std::mem::swap(&mut self.local_scope, &mut fn_scope);
 
                     for param in &fn_item.params {
@@ -236,7 +236,7 @@ impl<'a> TypeChecker<'a> {
                 if then_ty == else_ty { then_ty } else { SemTy::Unit }
             }
             Expr::Block(block) => {
-                let mut block_scope = Scope::child(self.local_scope.clone());
+                let mut block_scope = Scope::child(&self.local_scope);
                 std::mem::swap(&mut self.local_scope, &mut block_scope);
                 let ty = self.check_block(block, None);
                 std::mem::swap(&mut self.local_scope, &mut block_scope);

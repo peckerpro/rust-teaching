@@ -92,6 +92,8 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_item(&mut self) -> Option<Item> {
+        self.eat(TokenKind::KwPub);
+
         match self.peek_tok()?.kind.clone() {
             TokenKind::KwFn => Some(self.parse_fn_item()),
             TokenKind::KwStruct => Some(self.parse_struct_item()),

@@ -11,6 +11,7 @@ use rt_semantic::{resolve::NameResolver, typeck::TypeChecker};
 use rt_codegen::{codegen::Codegen, context::CodegenContext};
 use inkwell::context::Context;
 use std::sync::Arc;
+use ariadne::{Color, Label, Report, ReportKind, Source};
 
 fn main() {
     let args = Args::parse();
@@ -39,7 +40,7 @@ fn main() {
     if args.verbose { eprintln!("  => parsed {} items", items.len()); }
 
     if par.diagnostics.has_errors() {
-        print_diagnostics(&par.diagnostics, &file);
+        print_diagnostics_rich(&par.diagnostics, &file);
         process::exit(1);
     }
 
@@ -58,7 +59,7 @@ fn main() {
     let scope = resolver.resolve_program(&items);
 
     if diag.has_errors() {
-        print_diagnostics(&diag, &file);
+        print_diagnostics_rich(&diag, &file);
         process::exit(1);
     }
 
@@ -66,7 +67,7 @@ fn main() {
     typeck.check_program(&items);
 
     if diag.has_errors() {
-        print_diagnostics(&diag, &file);
+        print_diagnostics_rich(&diag, &file);
         process::exit(1);
     }
 
@@ -84,7 +85,7 @@ fn main() {
     codegen.codegen_program(&items);
 
     if diag.has_errors() {
-        print_diagnostics(&diag, &file);
+        print_diagnostics_rich(&diag, &file);
         process::exit(1);
     }
 
@@ -128,15 +129,37 @@ fn print_tokens(source: &str, file: &Arc<SourceFile>) {
     }
 }
 
-fn print_diagnostics(diag: &DiagnosticBag, file: &Arc<SourceFile>) {
+fn print_diagnostics_rich(diag: &DiagnosticBag, file: &Arc<SourceFile>) {
+    let mut builder = Report::build(ReportKind::Error, &file.name, 0);
+    let mut has_any = false;
+
     for d in diag.diagnostics() {
         let (line, col) = file.lookup_pos(d.span.lo);
-        let level = match d.level {
-            Level::Error => "error",
-            Level::Warning => "warning",
-            _ => "note",
+        let kind = match d.level {
+            Level::Error => ReportKind::Error,
+            Level::Warning => ReportKind::Warning,
+            _ => ReportKind::Advice,
         };
-        eprintln!("{}:{}:{}: {}: {}", file.name, line, col, level, d.message);
+
+        let label = Label::new((&file.name, d.span.lo.to_usize()..d.span.hi.to_usize()))
+            .with_message(&d.message)
+            .with_color(match d.level {
+                Level::Error => Color::Red,
+                Level::Warning => Color::Yellow,
+                _ => Color::Blue,
+            });
+
+        builder = builder.with_label(label);
+        if !has_any {
+            builder = builder.with_message(format!("{}:{}: {}", line, col, d.message));
+            has_any = true;
+        }
     }
+
+    builder
+        .finish()
+        .print((&file.name, Source::from(file.src.clone())))
+        .unwrap();
+
     eprintln!("compilation failed with {} errors", diag.error_count());
 }

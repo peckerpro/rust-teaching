@@ -3,7 +3,7 @@ use std::collections::HashMap;
 #[derive(Debug, Clone)]
 pub struct Scope {
     pub parent: Option<Box<Scope>>,
-    symbols: HashMap<String, SymbolEntry>,
+    pub symbols: HashMap<String, SymbolEntry>,
 }
 
 #[derive(Debug, Clone)]
@@ -18,44 +18,19 @@ pub enum SymbolEntry {
 }
 
 #[derive(Debug, Clone)]
-pub struct VarInfo {
-    pub ty: Option<crate::ty::SemTy>,
-    pub is_mut: bool,
-}
-
+pub struct VarInfo { pub ty: Option<crate::ty::SemTy>, pub is_mut: bool }
 #[derive(Debug, Clone)]
-pub struct FnInfo {
-    pub params: Vec<crate::ty::SemTy>,
-    pub ret: Option<crate::ty::SemTy>,
-    pub generics: Vec<String>,
-}
-
+pub struct FnInfo { pub params: Vec<crate::ty::SemTy>, pub ret: Option<crate::ty::SemTy>, pub generics: Vec<String> }
 #[derive(Debug, Clone)]
-pub struct StructInfo {
-    pub fields: Vec<(String, crate::ty::SemTy)>,
-    pub generics: Vec<String>,
-}
-
+pub struct StructInfo { pub fields: Vec<(String, crate::ty::SemTy)>, pub generics: Vec<String> }
 #[derive(Debug, Clone)]
-pub struct EnumInfo {
-    pub variants: Vec<(String, Option<Vec<crate::ty::SemTy>>)>,
-    pub generics: Vec<String>,
-}
-
+pub struct EnumInfo { pub variants: Vec<(String, Option<Vec<crate::ty::SemTy>>)>, pub generics: Vec<String> }
 #[derive(Debug, Clone)]
-pub struct TypeAliasInfo {
-    pub ty: crate::ty::SemTy,
-}
-
+pub struct TypeAliasInfo { pub ty: crate::ty::SemTy }
 #[derive(Debug, Clone)]
-pub struct TraitInfo {
-    pub methods: Vec<(String, Vec<crate::ty::SemTy>, Option<crate::ty::SemTy>)>,
-}
-
+pub struct TraitInfo { pub methods: Vec<(String, Vec<crate::ty::SemTy>, Option<crate::ty::SemTy>)> }
 #[derive(Debug, Clone)]
-pub struct ModuleInfo {
-    pub scope: Box<Scope>,
-}
+pub struct ModuleInfo { pub scope: Box<Scope> }
 
 impl Scope {
     pub fn new() -> Self {
@@ -65,9 +40,9 @@ impl Scope {
         }
     }
 
-    pub fn child(parent: Scope) -> Self {
+    pub fn child(parent: &Scope) -> Self {
         Scope {
-            parent: Some(Box::new(parent)),
+            parent: Some(Box::new(parent.clone())),
             symbols: HashMap::new(),
         }
     }

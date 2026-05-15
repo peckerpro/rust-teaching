@@ -135,7 +135,15 @@ impl<'a> NameResolver<'a> {
     fn resolve_item(&mut self, item: &Item, scope: &mut Scope, global: &Scope) {
         match item {
             Item::Fn(fn_item) => {
-                let mut fn_scope = Scope::child(scope.clone());
+                let ret_ty = fn_item.ret_ty.as_ref().map(|t| self.convert_ty(t));
+                let fn_info = FnInfo {
+                    params: fn_item.params.iter().map(|p| self.convert_ty(&p.ty)).collect(),
+                    ret: ret_ty.clone(),
+                    generics: vec![],
+                };
+                scope.insert(fn_item.name.clone(), SymbolEntry::Fn(fn_info.clone()));
+
+                let mut fn_scope = Scope::child(scope);
                 for param in &fn_item.params {
                     let name = match &param.pattern {
                         Pattern::Ident(p) => p.name.clone(),
@@ -144,14 +152,7 @@ impl<'a> NameResolver<'a> {
                     let ty = self.convert_ty(&param.ty);
                     fn_scope.insert(name, SymbolEntry::Var(VarInfo { ty: Some(ty), is_mut: false }));
                 }
-                let ret_ty = fn_item.ret_ty.as_ref().map(|t| self.convert_ty(t));
-                let fn_info = FnInfo {
-                    params: fn_item.params.iter().map(|p| self.convert_ty(&p.ty)).collect(),
-                    ret: ret_ty.clone(),
-                    generics: vec![],
-                };
-                fn_scope.insert(fn_item.name.clone(), SymbolEntry::Fn(fn_info.clone()));
-                scope.insert(fn_item.name.clone(), SymbolEntry::Fn(fn_info));
+                fn_scope.insert(fn_item.name.clone(), SymbolEntry::Fn(fn_info));
 
                 if let Some(body) = &fn_item.body {
                     self.resolve_block(body, &mut fn_scope, global);
@@ -268,7 +269,7 @@ impl<'a> NameResolver<'a> {
                 }
             }
             Expr::Block(b) => {
-                let mut block_scope = Scope::child(scope.clone());
+                let mut block_scope = Scope::child(scope);
                 self.resolve_block(b, &mut block_scope, global);
             }
             Expr::Return(r) => {

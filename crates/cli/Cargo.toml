@@ -19,4 +19,4 @@ rt-codegen.path = "../codegen"
 clap.workspace = true
 inkwell.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
+ariadne.workspace = true
