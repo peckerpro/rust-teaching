@@ -27,10 +27,12 @@ impl<'ctx> CodegenContext<'ctx> {
 
     pub fn sem_ty_to_llvm(&self, ty: &SemTy) -> BasicTypeEnum<'ctx> {
         match ty {
-            SemTy::I32 => self.context.i32_type().into(),
-            SemTy::I64 => self.context.i64_type().into(),
-            SemTy::U32 => self.context.i32_type().into(),
-            SemTy::U64 => self.context.i64_type().into(),
+            SemTy::I8 | SemTy::U8 => self.context.i8_type().into(),
+            SemTy::I16 | SemTy::U16 => self.context.i16_type().into(),
+            SemTy::I32 | SemTy::U32 => self.context.i32_type().into(),
+            SemTy::I64 | SemTy::U64 => self.context.i64_type().into(),
+            SemTy::I128 | SemTy::U128 => self.context.i128_type().into(),
+            SemTy::ISize | SemTy::USize => self.context.i64_type().into(),
             SemTy::F32 => self.context.f32_type().into(),
             SemTy::F64 => self.context.f64_type().into(),
             SemTy::Bool => self.context.bool_type().into(),

@@ -70,6 +70,7 @@ impl Expr {
 pub struct LiteralExpr {
     pub kind: LiteralKind,
     pub value: String,
+    pub suffix: Option<String>,
     pub span: Span,
 }
 

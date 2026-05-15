@@ -2,10 +2,11 @@
 set -euo pipefail
 # =============================================================================
 # OpenCode Test Suite — compares rtc against rustc for teaching compiler validation
-# Usage: bash scripts/test-suite.sh              # run all tests
-#        bash scripts/test-suite.sh --positive    # positive tests only
-#        bash scripts/test-suite.sh --negative    # negative tests only
-#        bash scripts/test-suite.sh --ir-compare  # IR comparison tests
+# Usage: bash scripts/test-suite.sh                  # all tests (rtc only)
+#        bash scripts/test-suite.sh --positive        # positive tests only
+#        bash scripts/test-suite.sh --negative        # negative tests only
+#        bash scripts/test-suite.sh --ir-compare      # IR comparison tests
+#        bash scripts/test-suite.sh --rustc-verify    # cross-verify against rustc
 # =============================================================================
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; NC='\033[0m'
@@ -101,6 +102,24 @@ run_test "function call (nested)"        "positive/fn_call_nested.rs"   positive
 run_test "multiple functions"            "positive/multi_fn.rs"         positive true
 run_test "fibonacci"                     "positive/fibonacci.rs"        positive true
 run_test "mutual recursion"              "positive/mutual_rec.rs"       positive true
+echo "  [Phase A1 — extended integral types]"
+run_test "type i8"                       "phase_a1/type_i8.rs"           positive true
+run_test "type i16"                      "phase_a1/type_i16.rs"          positive true
+run_test "type i32"                      "phase_a1/type_i32.rs"          positive true
+run_test "type i64"                      "phase_a1/type_i64.rs"          positive true
+run_test "type u8"                       "phase_a1/type_u8.rs"           positive true
+run_test "type u16"                      "phase_a1/type_u16.rs"          positive true
+run_test "type u32"                      "phase_a1/type_u32.rs"          positive true
+run_test "type u64"                      "phase_a1/type_u64.rs"          positive true
+run_test "type f32"                      "phase_a1/type_f32.rs"          positive true
+run_test "type f64"                      "phase_a1/type_f64.rs"          positive true
+run_test "type isize"                    "phase_a1/type_isize.rs"        positive true
+run_test "type usize"                    "phase_a1/type_usize.rs"        positive true
+run_test "fn with i8"                    "phase_a1/fn_i8.rs"             positive true
+run_test "fn with i64"                   "phase_a1/fn_i64.rs"            positive true
+run_test "fn with f32"                   "phase_a1/fn_f32.rs"            positive true
+run_test "fn with f64"                   "phase_a1/fn_f64.rs"            positive true
+run_test "all types"                     "phase_a1/all_types.rs"         positive true
 fi
 
 # ---- Negative Tests ----
@@ -114,6 +133,11 @@ run_test "type mismatch (int vs bool)"   "negative/type_mismatch.rs"    negative
 run_test "double declaration"            "negative/double_decl.rs"      negative false
 run_test "if condition not bool"         "negative/if_not_bool.rs"      negative false
 run_test "return type mismatch"          "negative/return_mismatch.rs"  negative false
+echo "  [Phase A1 — negative]"
+run_test "float literal → i32 var"       "phase_a1/neg_float_to_int.rs"   negative false
+run_test "int literal → f64 var"         "phase_a1/neg_int_to_float.rs"   negative false
+run_test "i64 literal → i16 var"         "phase_a1/neg_i64_to_i16.rs"     negative false
+run_test "i8 literal → i32 var"          "phase_a1/type_mismatch_width.rs" negative false
 fi
 
 # ---- IR Compare Tests ----
@@ -125,6 +149,32 @@ echo "------------------------------------------"
 run_test "simple main"                   "ir_compare/simple_main.rs"    ir-compare true
 run_test "fn with params"                "ir_compare/fn_params.rs"      ir-compare true
 run_test "arithmetic"                    "ir_compare/arithmetic.rs"     ir-compare true
+fi
+
+# ---- Rustc cross-verification ----
+if [ "${1:-}" == "--rustc-verify" ]; then
+echo ""
+echo "[Rustc Cross-Verification — positive tests must also pass rustc]"
+echo "------------------------------------------"
+
+rustc_verify() {
+    local name="$1" file="$TESTS_DIR/$2"
+    if [ ! -f "$file" ]; then echo -e "  ${YELLOW}SKIP${NC} $name"; SKIP=$((SKIP+1)); return; fi
+    if timeout 10 "$RUSTC" --edition 2024 --crate-type bin -o /tmp/rustc_test_out_$$ "$file" > /dev/null 2>&1; then
+        rm -f /tmp/rustc_test_out_$$
+        echo -e "  ${GREEN}PASS${NC} $name (rtc+rustc agree)"
+        PASS=$((PASS + 1))
+    else
+        echo -e "  ${RED}FAIL${NC} $name (rustc rejected)"
+        FAIL=$((FAIL + 1))
+    fi
+}
+
+for f in "$TESTS_DIR"/positive/*.rs "$TESTS_DIR"/phase_a1/type_i8.rs "$TESTS_DIR"/phase_a1/type_i16.rs "$TESTS_DIR"/phase_a1/type_i32.rs "$TESTS_DIR"/phase_a1/type_i64.rs "$TESTS_DIR"/phase_a1/type_u8.rs "$TESTS_DIR"/phase_a1/type_u16.rs "$TESTS_DIR"/phase_a1/type_u32.rs "$TESTS_DIR"/phase_a1/type_u64.rs "$TESTS_DIR"/phase_a1/type_f32.rs "$TESTS_DIR"/phase_a1/type_f64.rs "$TESTS_DIR"/phase_a1/type_isize.rs "$TESTS_DIR"/phase_a1/type_usize.rs "$TESTS_DIR"/phase_a1/fn_*.rs "$TESTS_DIR"/phase_a1/all_types.rs; do
+    [ -f "$f" ] || continue
+    name="$(basename "$f" .rs)"
+    rustc_verify "rustc: $name" "${f#$TESTS_DIR/}"
+done
 fi
 
 echo ""

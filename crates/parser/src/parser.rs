@@ -630,39 +630,54 @@ impl<'a> Parser<'a> {
         let tok = self.bump().unwrap();
 
         match tok.kind {
-            TokenKind::Integer => Expr::Literal(LiteralExpr {
-                kind: LiteralKind::Integer,
-                value: self.lexer_slice(&tok),
-                span: tok.span,
-            }),
-            TokenKind::Float => Expr::Literal(LiteralExpr {
-                kind: LiteralKind::Float,
-                value: self.lexer_slice(&tok),
-                span: tok.span,
-            }),
+            TokenKind::Integer => {
+                let raw = self.lexer_slice(&tok);
+                let (value, suffix) = split_suffix(&raw);
+                Expr::Literal(LiteralExpr {
+                    kind: LiteralKind::Integer,
+                    value,
+                    suffix,
+                    span: tok.span,
+                })
+            }
+            TokenKind::Float => {
+                let raw = self.lexer_slice(&tok);
+                let (value, suffix) = split_suffix(&raw);
+                Expr::Literal(LiteralExpr {
+                    kind: LiteralKind::Float,
+                    value,
+                    suffix,
+                    span: tok.span,
+                })
+            }
             TokenKind::Char => Expr::Literal(LiteralExpr {
                 kind: LiteralKind::Char,
                 value: self.lexer_slice(&tok),
+                suffix: None,
                 span: tok.span,
             }),
             TokenKind::Byte => Expr::Literal(LiteralExpr {
                 kind: LiteralKind::Byte,
                 value: self.lexer_slice(&tok),
+                suffix: None,
                 span: tok.span,
             }),
             TokenKind::String => Expr::Literal(LiteralExpr {
                 kind: LiteralKind::String,
                 value: self.lexer_slice(&tok),
+                suffix: None,
                 span: tok.span,
             }),
             TokenKind::ByteString => Expr::Literal(LiteralExpr {
                 kind: LiteralKind::ByteString,
                 value: self.lexer_slice(&tok),
+                suffix: None,
                 span: tok.span,
             }),
             TokenKind::KwTrue | TokenKind::KwFalse => Expr::Literal(LiteralExpr {
                 kind: LiteralKind::Bool,
                 value: self.lexer_slice(&tok),
+                suffix: None,
                 span: tok.span,
             }),
             TokenKind::Ident | TokenKind::KwSelfLower | TokenKind::KwSelfType => {
@@ -1307,3 +1322,22 @@ const PREC_MUL: u8 = 11;
 const PREC_PREFIX: u8 = 20;
 const PREC_CALL: u8 = 22;
 const PREC_FIELD: u8 = 22;
+
+fn split_suffix(raw: &str) -> (String, Option<String>) {
+    if let Some(pos) = raw.find(|c: char| c == 'i' || c == 'u' || c == 'f') {
+        if pos > 0 && !raw.as_bytes()[pos - 1].is_ascii_digit() && raw.as_bytes()[pos - 1] != b'.' {
+            return (raw.to_string(), None);
+        }
+        let suffix_start = pos;
+        let suffix = &raw[suffix_start..];
+        let value = &raw[..suffix_start];
+        let valid_suffix = suffix.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+        if valid_suffix && !suffix.is_empty() {
+            (value.to_string(), Some(suffix.to_string()))
+        } else {
+            (raw.to_string(), None)
+        }
+    } else {
+        (raw.to_string(), None)
+    }
+}

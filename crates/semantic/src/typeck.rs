@@ -140,14 +140,27 @@ impl<'a> TypeChecker<'a> {
 
     fn infer_expr(&mut self, expr: &Expr, expected_ret: &Option<SemTy>) -> SemTy {
         match expr {
-            Expr::Literal(lit) => match lit.kind {
-                LiteralKind::Integer => SemTy::I32,
-                LiteralKind::Float => SemTy::F64,
-                LiteralKind::Bool => SemTy::Bool,
-                LiteralKind::Char => SemTy::Char,
-                LiteralKind::String => SemTy::Str,
-                _ => SemTy::Infer,
-            },
+            Expr::Literal(lit) => {
+                if let Some(suffix) = &lit.suffix {
+                    SemTy::from_suffix(suffix).unwrap_or_else(|| match lit.kind {
+                        LiteralKind::Integer => SemTy::default_int(),
+                        LiteralKind::Float => SemTy::default_float(),
+                        LiteralKind::Bool => SemTy::Bool,
+                        LiteralKind::Char => SemTy::Char,
+                        LiteralKind::String => SemTy::Str,
+                        _ => SemTy::Infer,
+                    })
+                } else {
+                    match lit.kind {
+                        LiteralKind::Integer => SemTy::default_int(),
+                        LiteralKind::Float => SemTy::default_float(),
+                        LiteralKind::Bool => SemTy::Bool,
+                        LiteralKind::Char => SemTy::Char,
+                        LiteralKind::String => SemTy::Str,
+                        _ => SemTy::Infer,
+                    }
+                }
+            }
             Expr::Ident(ident) => {
                 match self.lookup(&ident.name) {
                     Some(SymbolEntry::Var(v)) => v.ty.clone().unwrap_or(SemTy::Infer),

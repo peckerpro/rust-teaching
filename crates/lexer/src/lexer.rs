@@ -69,8 +69,12 @@ impl<'a> Lexer<'a> {
                 let _ = self.cursor.eat_byte(b'+') || self.cursor.eat_byte(b'-');
                 self.cursor.eat_while(|b| b.is_ascii_digit() || b == b'_');
             }
+            // parse float suffix (f32, f64)
+            self.cursor.eat_while(|b| b.is_ascii_alphanumeric() || b == b'_');
             Token::new(TokenKind::Float, self.span(start))
         } else {
+            // parse integer suffix (i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, isize, usize)
+            self.cursor.eat_while(|b| b.is_ascii_alphanumeric() || b == b'_');
             Token::new(TokenKind::Integer, self.span(start))
         }
     }
