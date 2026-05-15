@@ -86,6 +86,10 @@ impl Scope {
     pub fn lookup_local(&self, name: &str) -> Option<&SymbolEntry> {
         self.symbols.get(name)
     }
+
+    pub fn iter(&self) -> std::collections::hash_map::Iter<'_, String, SymbolEntry> {
+        self.symbols.iter()
+    }
 }
 
 impl Default for Scope {

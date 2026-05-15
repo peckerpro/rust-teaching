@@ -120,6 +120,20 @@ run_test "fn with i64"                   "phase_a1/fn_i64.rs"            positiv
 run_test "fn with f32"                   "phase_a1/fn_f32.rs"            positive true
 run_test "fn with f64"                   "phase_a1/fn_f64.rs"            positive true
 run_test "all types"                     "phase_a1/all_types.rs"         positive true
+echo "  [Phase B — control flow]"
+run_test "loop break"                    "phase_b/loop_break.rs"          positive true
+run_test "loop counter"                  "phase_b/loop_counter.rs"        positive true
+run_test "while simple"                  "phase_b/while_simple.rs"        positive true
+run_test "while continue"                "phase_b/while_continue.rs"      positive true
+run_test "while break"                   "phase_b/while_break.rs"         positive true
+run_test "nested loop"                   "phase_b/nested_loop.rs"         positive true
+run_test "mixed loop/while"              "phase_b/mixed_loop_while.rs"    positive true
+run_test "for simple"                    "phase_b/for_simple.rs"          positive true
+run_test "while large"                   "phase_b/while_large.rs"         positive true
+echo "  [Phase C — compound data types]"
+run_test "struct basic"                  "phase_c/struct_basic.rs"        positive true
+run_test "struct field access"           "phase_c/struct_field_access.rs" positive true
+run_test "struct literal"                "phase_c/struct_literal.rs"      positive true
 fi
 
 # ---- Negative Tests ----
@@ -138,6 +152,12 @@ run_test "float literal → i32 var"       "phase_a1/neg_float_to_int.rs"   nega
 run_test "int literal → f64 var"         "phase_a1/neg_int_to_float.rs"   negative false
 run_test "i64 literal → i16 var"         "phase_a1/neg_i64_to_i16.rs"     negative false
 run_test "i8 literal → i32 var"          "phase_a1/type_mismatch_width.rs" negative false
+echo "  [Phase B — negative]"
+run_test "break outside loop"            "phase_b/neg_break_outside_loop.rs"   negative false
+run_test "continue outside loop"         "phase_b/neg_continue_outside_loop.rs" negative false
+echo "  [Phase C — negative]"
+run_test "field type mismatch"           "phase_c/neg_field_type_mismatch.rs"       negative false
+run_test "struct literal type mismatch"  "phase_c/neg_struct_literal_mismatch.rs"   negative false
 fi
 
 # ---- IR Compare Tests ----

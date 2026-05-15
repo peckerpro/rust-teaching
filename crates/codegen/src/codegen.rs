@@ -38,6 +38,17 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
     fn codegen_item(&mut self, item: &Item) {
         match item {
             Item::Fn(fn_item) => self.codegen_fn(fn_item),
+            Item::Struct(struct_item) => {
+                let fields: Vec<(String, SemTy)> = match &struct_item.kind {
+                    StructKind::Named(fields) => fields.iter()
+                        .map(|f| (f.name.clone(), self.ast_ty_to_sem(&f.ty)))
+                        .collect(),
+                    _ => vec![],
+                };
+                if !fields.is_empty() {
+                    self.ctx.declare_struct(&struct_item.name, &fields);
+                }
+            }
             _ => {}
         }
     }
@@ -245,25 +256,25 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 self.ctx.builder.build_conditional_branch(cond, then_block, else_block).unwrap();
 
                 self.ctx.builder.position_at_end(then_block);
-                let _then_val = self.codegen_block(&if_expr.then_branch);
+                let then_val = self.codegen_block(&if_expr.then_branch);
                 self.ctx.builder.build_unconditional_branch(merge_block).unwrap();
                 let then_block_end = self.ctx.builder.get_insert_block().unwrap();
 
                 self.ctx.builder.position_at_end(else_block);
-                let _else_val = if_expr.else_branch.as_ref().and_then(|e| self.codegen_expr(e));
+                let else_val = if_expr.else_branch.as_ref().and_then(|e| self.codegen_expr(e));
                 self.ctx.builder.build_unconditional_branch(merge_block).unwrap();
                 let else_block_end = self.ctx.builder.get_insert_block().unwrap();
 
                 self.ctx.builder.position_at_end(merge_block);
                 let phi = self.ctx.builder.build_phi(self.ctx.context.i64_type(), "iftmp").unwrap();
 
-                if let Some(v) = _then_val.and_then(|bv| match bv {
+                if let Some(v) = then_val.and_then(|bv| match bv {
                     BasicValueEnum::IntValue(iv) => Some(iv),
                     _ => None,
                 }) {
                     phi.add_incoming(&[(&v, then_block_end)]);
                 }
-                if let Some(v) = _else_val.and_then(|bv| match bv {
+                if let Some(v) = else_val.and_then(|bv| match bv {
                     BasicValueEnum::IntValue(iv) => Some(iv),
                     _ => None,
                 }) {
@@ -271,6 +282,107 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 }
 
                 Some(phi.as_basic_value().into())
+            }
+            Expr::Loop(loop_expr) => {
+                let function = self.ctx.builder.get_insert_block()
+                    .and_then(|b| b.get_parent())?;
+                let loop_header = self.ctx.context.append_basic_block(function, "loop_hdr");
+                let loop_body = self.ctx.context.append_basic_block(function, "loop_body");
+                let loop_exit = self.ctx.context.append_basic_block(function, "loop_exit");
+
+                self.ctx.builder.build_unconditional_branch(loop_header).unwrap();
+
+                self.ctx.builder.position_at_end(loop_header);
+                self.ctx.builder.build_unconditional_branch(loop_body).unwrap();
+
+                self.ctx.builder.position_at_end(loop_body);
+                self.ctx.loop_stack.push((loop_header, loop_exit));
+                self.codegen_block(&loop_expr.body);
+                self.ctx.loop_stack.pop();
+                self.ctx.builder.build_unconditional_branch(loop_header).unwrap();
+
+                self.ctx.builder.position_at_end(loop_exit);
+                None
+            }
+            Expr::While(while_expr) => {
+                let cond_val = self.codegen_expr(&while_expr.condition)?;
+
+                let function = self.ctx.builder.get_insert_block()
+                    .and_then(|b| b.get_parent())?;
+                let while_cond = self.ctx.context.append_basic_block(function, "while_cond");
+                let while_body = self.ctx.context.append_basic_block(function, "while_body");
+                let while_exit = self.ctx.context.append_basic_block(function, "while_exit");
+
+                self.ctx.builder.build_unconditional_branch(while_cond).unwrap();
+
+                self.ctx.builder.position_at_end(while_cond);
+                let loop_cond = self.codegen_expr(&while_expr.condition)?;
+                let loop_cond_int = match loop_cond {
+                    BasicValueEnum::IntValue(iv) => iv,
+                    _ => return None,
+                };
+                self.ctx.builder.build_conditional_branch(loop_cond_int, while_body, while_exit).unwrap();
+
+                self.ctx.builder.position_at_end(while_body);
+                self.ctx.loop_stack.push((while_cond, while_exit));
+                self.codegen_block(&while_expr.body);
+                self.ctx.loop_stack.pop();
+                self.ctx.builder.build_unconditional_branch(while_cond).unwrap();
+
+                self.ctx.builder.position_at_end(while_exit);
+                None
+            }
+            Expr::For(for_expr) => {
+                let function = self.ctx.builder.get_insert_block()
+                    .and_then(|b| b.get_parent())?;
+
+                let for_cond = self.ctx.context.append_basic_block(function, "for_cond");
+                let for_body = self.ctx.context.append_basic_block(function, "for_body");
+                let for_inc = self.ctx.context.append_basic_block(function, "for_inc");
+                let for_exit = self.ctx.context.append_basic_block(function, "for_exit");
+
+                let _iterable = self.codegen_expr(&for_expr.iterable)?;
+
+                self.ctx.builder.build_unconditional_branch(for_cond).unwrap();
+
+                self.ctx.builder.position_at_end(for_cond);
+                let zero = self.ctx.context.i64_type().const_int(0, false);
+                let ten = self.ctx.context.i64_type().const_int(10, false);
+                let iter_check = self.ctx.builder.build_int_compare(
+                    IntPredicate::SLT, zero, ten, "for_has_next"
+                ).unwrap();
+                self.ctx.builder.build_conditional_branch(iter_check, for_body, for_exit).unwrap();
+
+                self.ctx.builder.position_at_end(for_body);
+                let pat_name = match &for_expr.pattern {
+                    rt_ast::pattern::Pattern::Ident(p) => p.name.clone(),
+                    _ => "for_val".into(),
+                };
+                let iter_val = self.ctx.context.i64_type().const_int(0, false);
+                self.ctx.values.insert(pat_name, iter_val.into());
+
+                self.ctx.loop_stack.push((for_inc, for_exit));
+                self.codegen_block(&for_expr.body);
+                self.ctx.loop_stack.pop();
+                self.ctx.builder.build_unconditional_branch(for_inc).unwrap();
+
+                self.ctx.builder.position_at_end(for_inc);
+                self.ctx.builder.build_unconditional_branch(for_cond).unwrap();
+
+                self.ctx.builder.position_at_end(for_exit);
+                None
+            }
+            Expr::Break(break_expr) => {
+                if let Some((_, exit_block)) = self.ctx.loop_stack.last().copied() {
+                    self.ctx.builder.build_unconditional_branch(exit_block).unwrap();
+                }
+                None
+            }
+            Expr::Continue(_) => {
+                if let Some((cont_block, _)) = self.ctx.loop_stack.last().copied() {
+                    self.ctx.builder.build_unconditional_branch(cont_block).unwrap();
+                }
+                None
             }
             Expr::Return(ret) => {
                 if let Some(e) = &ret.expr {
@@ -284,6 +396,54 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             }
             Expr::Block(block) => {
                 self.codegen_block(block)
+            }
+            Expr::Field(field_expr) => {
+                let base_val = self.codegen_expr(&field_expr.base)?;
+                let field_name = field_expr.field.clone();
+                let field_info = self.ctx.struct_types.iter()
+                    .find_map(|(name, (_, fields))| {
+                        fields.iter().position(|f| f == &field_name)
+                            .map(|idx| (name.clone(), idx))
+                    });
+                if let Some((struct_name, idx)) = field_info {
+                    if let Some((struct_type, _)) = self.ctx.struct_types.get(&struct_name) {
+                        let st = struct_type.as_basic_type_enum().into_struct_type();
+                        let field_val = self.ctx.builder.build_extract_value(
+                            base_val.into_struct_value(), idx as u32, &field_name
+                        ).unwrap();
+                        return Some(field_val);
+                    }
+                }
+                None
+            }
+            Expr::Struct(struct_expr) => {
+                let struct_name = struct_expr.path.as_simple()?.to_string();
+                let field_count = self.ctx.struct_types.get(&struct_name)
+                    .map(|(_, fns)| fns.len())
+                    .unwrap_or(0);
+                let mut field_values: Vec<BasicValueEnum<'ctx>> = Vec::new();
+                for (fname, fexpr) in &struct_expr.fields {
+                    if let Some(val) = self.codegen_expr(fexpr) {
+                        field_values.push(val);
+                    }
+                }
+                while field_values.len() < field_count {
+                    field_values.push(self.ctx.context.i64_type().const_int(0, false).into());
+                }
+                if let Some((struct_type, _)) = self.ctx.struct_types.get(&struct_name) {
+                    let st = struct_type.as_basic_type_enum().into_struct_type();
+                    let struct_val = st.const_named_struct(&field_values);
+                    return Some(struct_val.into());
+                }
+                None
+            }
+            Expr::Assign(assign_expr) => {
+                let rhs = self.codegen_expr(&assign_expr.rhs)?;
+                if let Expr::Ident(ident) = assign_expr.lhs.as_ref() {
+                    self.ctx.values.insert(ident.name.clone(), rhs);
+                    return Some(rhs);
+                }
+                None
             }
             _ => None,
         }

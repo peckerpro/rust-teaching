@@ -13,6 +13,7 @@ pub struct TypeChecker<'a> {
     pub diagnostics: &'a mut DiagnosticBag,
     file: Arc<SourceFile>,
     local_scope: Scope,
+    loop_depth: usize,
 }
 
 impl<'a> TypeChecker<'a> {
@@ -22,6 +23,7 @@ impl<'a> TypeChecker<'a> {
             diagnostics,
             file,
             local_scope: Scope::new(),
+            loop_depth: 0,
         }
     }
 
@@ -31,6 +33,19 @@ impl<'a> TypeChecker<'a> {
 
     fn lookup(&self, name: &str) -> Option<&SymbolEntry> {
         self.local_scope.lookup(name).or_else(|| self.global_scope.lookup(name))
+    }
+
+    fn lookup_struct_field(&self, field_name: &str) -> Option<SemTy> {
+        self.global_scope.iter()
+            .find_map(|(_, entry)| {
+                if let SymbolEntry::Struct(info) = entry {
+                    info.fields.iter()
+                        .find(|(fname, _)| fname == field_name)
+                        .map(|(_, fty)| fty.clone())
+                } else {
+                    None
+                }
+            })
     }
 
     pub fn check_program(&mut self, items: &[Item]) {
@@ -223,18 +238,75 @@ impl<'a> TypeChecker<'a> {
                 }
             }
             Expr::Loop(loop_expr) => {
+                self.loop_depth += 1;
                 self.check_block(&loop_expr.body, None);
+                self.loop_depth -= 1;
                 SemTy::Unit
             }
             Expr::While(while_expr) => {
                 self.infer_expr(&while_expr.condition, &expected_ret);
+                self.loop_depth += 1;
                 self.check_block(&while_expr.body, None);
+                self.loop_depth -= 1;
                 SemTy::Unit
             }
             Expr::For(for_expr) => {
                 self.infer_expr(&for_expr.iterable, &expected_ret);
+                let name = match &for_expr.pattern {
+                    rt_ast::pattern::Pattern::Ident(p) => p.name.clone(),
+                    _ => String::new(),
+                };
+                if !name.is_empty() {
+                    self.local_scope.insert(name, SymbolEntry::Var(VarInfo { ty: Some(SemTy::I32), is_mut: false }));
+                }
+                self.loop_depth += 1;
                 self.check_block(&for_expr.body, None);
+                self.loop_depth -= 1;
                 SemTy::Unit
+            }
+            Expr::Break(break_expr) => {
+                if self.loop_depth == 0 {
+                    self.error("`break` outside of a loop".into(), break_expr.span);
+                }
+                SemTy::Never
+            }
+            Expr::Continue(cont_span) => {
+                if self.loop_depth == 0 {
+                    self.error("`continue` outside of a loop".into(), *cont_span);
+                }
+                SemTy::Never
+            }
+            Expr::Field(field_expr) => {
+                self.infer_expr(&field_expr.base, &expected_ret);
+                self.lookup_struct_field(&field_expr.field).unwrap_or(SemTy::Infer)
+            }
+            Expr::Struct(struct_expr) => {
+                let name = struct_expr.path.as_simple().unwrap_or("");
+                for (field_name, field_expr) in &struct_expr.fields {
+                    let field_ty = self.infer_expr(field_expr, &expected_ret);
+                    let expected_ty = self.lookup_struct_field(field_name);
+                    if let (Some(expected), _) = (&expected_ty, &field_ty) {
+                        if expected != &SemTy::Infer && field_ty != SemTy::Infer && expected != &field_ty {
+                            self.error(
+                                format!("struct field type mismatch: expected {}, found {}", expected.name(), field_ty.name()),
+                                field_expr.span(),
+                            );
+                        }
+                    }
+                }
+                match self.global_scope.lookup(name) {
+                    Some(SymbolEntry::Struct(_)) => SemTy::Struct(crate::ty::StructTy {
+                        name: name.to_string(),
+                        fields: vec![],
+                        generics: vec![],
+                    }),
+                    _ => SemTy::Infer,
+                }
+            }
+            Expr::Assign(assign_expr) => {
+                let rhs_ty = self.infer_expr(&assign_expr.rhs, &expected_ret);
+                self.infer_expr(&assign_expr.lhs, &expected_ret);
+                rhs_ty
             }
             _ => SemTy::Infer,
         }

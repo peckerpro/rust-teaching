@@ -1,8 +1,9 @@
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::builder::Builder;
-use inkwell::values::{FunctionValue, BasicValueEnum};
-use inkwell::types::{BasicType, BasicTypeEnum};
+use inkwell::values::BasicValueEnum;
+use inkwell::types::{BasicType, BasicTypeEnum, StructType};
+use inkwell::basic_block::BasicBlock;
 use std::collections::HashMap;
 use rt_semantic::ty::SemTy;
 
@@ -11,6 +12,8 @@ pub struct CodegenContext<'ctx> {
     pub module: Module<'ctx>,
     pub builder: Builder<'ctx>,
     pub values: HashMap<String, BasicValueEnum<'ctx>>,
+    pub loop_stack: Vec<(BasicBlock<'ctx>, BasicBlock<'ctx>)>,
+    pub struct_types: HashMap<String, (StructType<'ctx>, Vec<String>)>,
 }
 
 impl<'ctx> CodegenContext<'ctx> {
@@ -22,6 +25,25 @@ impl<'ctx> CodegenContext<'ctx> {
             module,
             builder,
             values: HashMap::new(),
+            loop_stack: Vec::new(),
+            struct_types: HashMap::new(),
+        }
+    }
+
+    pub fn declare_struct(&mut self, name: &str, fields: &[(String, SemTy)]) {
+        let llvm_fields: Vec<BasicTypeEnum<'ctx>> = fields
+            .iter()
+            .map(|(_, ty)| self.sem_ty_to_llvm(ty))
+            .collect();
+        let field_names: Vec<String> = fields.iter().map(|(n, _)| n.clone()).collect();
+
+        if let Some(struct_type) = self.context.get_struct_type(name) {
+            struct_type.set_body(&llvm_fields, false);
+            self.struct_types.insert(name.to_string(), (struct_type, field_names));
+        } else {
+            let struct_type = self.context.opaque_struct_type(name);
+            struct_type.set_body(&llvm_fields, false);
+            self.struct_types.insert(name.to_string(), (struct_type, field_names));
         }
     }
 

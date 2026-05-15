@@ -276,6 +276,25 @@ impl<'a> NameResolver<'a> {
                     self.resolve_expr(e, scope, global);
                 }
             }
+            Expr::Loop(loop_expr) => {
+                self.resolve_block(&loop_expr.body, scope, global);
+            }
+            Expr::While(while_expr) => {
+                self.resolve_expr(&while_expr.condition, scope, global);
+                self.resolve_block(&while_expr.body, scope, global);
+            }
+            Expr::For(for_expr) => {
+                let name = match &for_expr.pattern {
+                    Pattern::Ident(p) => p.name.clone(),
+                    _ => String::new(),
+                };
+                if !name.is_empty() {
+                    scope.insert(name, SymbolEntry::Var(VarInfo { ty: Some(SemTy::I32), is_mut: false }));
+                }
+                self.resolve_expr(&for_expr.iterable, scope, global);
+                self.resolve_block(&for_expr.body, scope, global);
+            }
+            Expr::Break(_) | Expr::Continue(_) => {}
             _ => {}
         }
     }
