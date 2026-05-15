@@ -1,0 +1,111 @@
+version: '3.8'
+
+services:
+  # API网关
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./services/api-gateway/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - compiler-service
+      - teaching-service
+      - user-service
+    restart: unless-stopped
+
+  # 编译服务
+  compiler-service:
+    build:
+      context: .
+      dockerfile: services/compiler-service/Dockerfile
+    ports:
+      - "3001:3001"
+    environment:
+      - DATABASE_URL=postgres://rusteach:rusteach@postgres:5432/rusteach
+      - REDIS_URL=redis://redis:6379
+      - RUST_LOG=info
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock  # 沙箱需要docker
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+
+  # 教学服务
+  teaching-service:
+    build:
+      context: .
+      dockerfile: services/teaching-service/Dockerfile
+    ports:
+      - "3002:3002"
+    environment:
+      - DATABASE_URL=postgres://rusteach:rusteach@postgres:5432/rusteach
+      - RUST_LOG=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # 用户服务
+  user-service:
+    build:
+      context: .
+      dockerfile: services/user-service/Dockerfile
+    ports:
+      - "3003:3003"
+    environment:
+      - DATABASE_URL=postgres://rusteach:rusteach@postgres:5432/rusteach
+      - REDIS_URL=redis://redis:6379
+      - JWT_SECRET=change-me-in-production
+      - RUST_LOG=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+
+  # 数据库
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rusteach
+      POSTGRES_PASSWORD: rusteach
+      POSTGRES_DB: rusteach
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rusteach"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+
+  # 缓存
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+
+volumes:
+  pg_data:
+  redis_data:
