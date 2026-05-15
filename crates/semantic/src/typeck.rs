@@ -14,6 +14,14 @@ pub struct TypeChecker<'a> {
     file: Arc<SourceFile>,
     local_scope: Scope,
     loop_depth: usize,
+    moved_vars: std::collections::HashSet<String>,
+}
+
+fn is_copy_type(ty: &SemTy) -> bool {
+    matches!(ty, SemTy::I8 | SemTy::I16 | SemTy::I32 | SemTy::I64 | SemTy::I128
+        | SemTy::U8 | SemTy::U16 | SemTy::U32 | SemTy::U64 | SemTy::U128
+        | SemTy::ISize | SemTy::USize | SemTy::F32 | SemTy::F64 | SemTy::Bool
+        | SemTy::Char | SemTy::Unit | SemTy::Never)
 }
 
 impl<'a> TypeChecker<'a> {
@@ -24,11 +32,30 @@ impl<'a> TypeChecker<'a> {
             file,
             local_scope: Scope::new(),
             loop_depth: 0,
+            moved_vars: std::collections::HashSet::new(),
         }
     }
 
     fn error(&mut self, msg: String, span: Span) {
         self.diagnostics.error(msg, span, self.file.clone());
+    }
+
+    fn check_moved(&mut self, name: &str, span: Span) {
+        if self.moved_vars.contains(name) {
+            self.error(format!("use of moved value: `{}`", name), span);
+        }
+    }
+
+    fn mark_moved_if_var(&mut self, expr: &Expr) {
+        if let Expr::Ident(ident) = expr {
+            if let Some(SymbolEntry::Var(v)) = self.lookup(&ident.name) {
+                if let Some(ty) = &v.ty {
+                    if !is_copy_type(ty) {
+                        self.moved_vars.insert(ident.name.clone());
+                    }
+                }
+            }
+        }
     }
 
     fn lookup(&self, name: &str) -> Option<&SymbolEntry> {
@@ -107,6 +134,9 @@ impl<'a> TypeChecker<'a> {
                 Stmt::Let { pattern, ty, init, .. } => {
                     let sem_ty = ty.as_ref().map(|t| self.ast_ty_to_sem(t));
                     let init_ty = init.as_ref().map(|expr| self.infer_expr(expr, &expected_ret));
+                    if let Some(expr) = init {
+                        self.mark_moved_if_var(expr);
+                    }
                     if let (Some(decl_ty), Some(inf_ty)) = (&sem_ty, &init_ty) {
                         if decl_ty != &SemTy::Infer && inf_ty != &SemTy::Infer {
                             let mismatch = match (decl_ty, inf_ty) {
@@ -189,6 +219,7 @@ impl<'a> TypeChecker<'a> {
                 }
             }
             Expr::Ident(ident) => {
+                self.check_moved(&ident.name, ident.span);
                 match self.lookup(&ident.name) {
                     Some(SymbolEntry::Var(v)) => v.ty.clone().unwrap_or(SemTy::Infer),
                     Some(SymbolEntry::Fn(_)) => SemTy::Infer,
@@ -217,8 +248,9 @@ impl<'a> TypeChecker<'a> {
             }
             Expr::Call(call) => {
                 self.infer_expr(&call.func, &expected_ret);
-            for arg in &call.args {
+                for arg in &call.args {
                     self.infer_expr(arg, &expected_ret);
+                    self.mark_moved_if_var(arg);
                 }
                 SemTy::Infer
             }
@@ -294,13 +326,16 @@ impl<'a> TypeChecker<'a> {
             }
             Expr::Struct(struct_expr) => {
                 let name = struct_expr.path.as_simple().unwrap_or("");
+                for (_, field_expr) in &struct_expr.fields {
+                    self.infer_expr(field_expr, &expected_ret);
+                    self.mark_moved_if_var(field_expr);
+                }
                 for (field_name, field_expr) in &struct_expr.fields {
                     let field_ty = self.infer_expr(field_expr, &expected_ret);
-                    let expected_ty = self.lookup_struct_field(field_name);
-                    if let (Some(expected), _) = (&expected_ty, &field_ty) {
-                        if expected != &SemTy::Infer && field_ty != SemTy::Infer && expected != &field_ty {
+                    if let Some(expected_ty) = self.lookup_struct_field(field_name) {
+                        if expected_ty != SemTy::Infer && field_ty != SemTy::Infer && expected_ty != field_ty {
                             self.error(
-                                format!("struct field type mismatch: expected {}, found {}", expected.name(), field_ty.name()),
+                                format!("struct field type mismatch: expected {}, found {}", expected_ty.name(), field_ty.name()),
                                 field_expr.span(),
                             );
                         }
@@ -318,6 +353,7 @@ impl<'a> TypeChecker<'a> {
             Expr::Assign(assign_expr) => {
                 let rhs_ty = self.infer_expr(&assign_expr.rhs, &expected_ret);
                 self.infer_expr(&assign_expr.lhs, &expected_ret);
+                self.mark_moved_if_var(&assign_expr.rhs);
                 rhs_ty
             }
             Expr::Tuple(tuple_expr) => {

@@ -140,6 +140,10 @@ run_test "tuple unit"                    "phase_c/tuple_unit.rs"          positi
 run_test "match literal"                 "phase_c/match_literal.rs"       positive true
 run_test "match wildcard"                "phase_c/match_wildcard.rs"      positive true
 run_test "match single arm"              "phase_c/match_single_arm.rs"    positive true
+echo "  [Phase D — ownership]"
+run_test "copy ok"                       "phase_d/copy_ok.rs"             positive true
+run_test "move struct"                   "phase_d/move_struct.rs"         positive true
+run_test "move into fn"                  "phase_d/move_into_fn.rs"        positive true
 fi
 
 # ---- Negative Tests ----
@@ -165,6 +169,9 @@ echo "  [Phase C — negative]"
 run_test "field type mismatch"           "phase_c/neg_field_type_mismatch.rs"       negative false
 run_test "struct literal type mismatch"  "phase_c/neg_struct_literal_mismatch.rs"   negative false
 run_test "tuple type mismatch"           "phase_c/neg_tuple_type_mismatch.rs"       negative false
+echo "  [Phase D — negative]"
+run_test "use after move"                "phase_d/neg_use_after_move.rs"          negative false
+run_test "move into fn (use after)"      "phase_d/neg_move_into_fn.rs"            negative false
 fi
 
 # ---- IR Compare Tests ----
