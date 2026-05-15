@@ -445,6 +445,68 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 }
                 None
             }
+            Expr::Tuple(tuple_expr) => {
+                let mut vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
+                for elem in &tuple_expr.elements {
+                    if let Some(v) = self.codegen_expr(elem) {
+                        vals.push(v);
+                    }
+                }
+                if vals.is_empty() {
+                    let unit_ty = self.ctx.context.struct_type(&[], false);
+                    return Some(unit_ty.const_zero().into());
+                }
+                let field_types: Vec<_> = vals.iter().map(|v| v.get_type()).collect();
+                let tup_ty = self.ctx.context.struct_type(&field_types, false);
+                let tup_val = tup_ty.const_named_struct(&vals);
+                Some(tup_val.into())
+            }
+            Expr::Match(match_expr) => {
+                let scrutinee = self.codegen_expr(&match_expr.scrutinee)?;
+                let function = self.ctx.builder.get_insert_block()
+                    .and_then(|b| b.get_parent())?;
+                let merge_block = self.ctx.context.append_basic_block(function, "match_merge");
+                let mut arm_blocks: Vec<_> = Vec::new();
+                for i in 0..match_expr.arms.len() {
+                    arm_blocks.push(self.ctx.context.append_basic_block(function, &format!("arm_{}", i)));
+                }
+
+                for (i, arm) in match_expr.arms.iter().enumerate() {
+                    let next_bb = if i + 1 < arm_blocks.len() { arm_blocks[i + 1] } else { merge_block };
+                    match &arm.pattern {
+                        rt_ast::pattern::Pattern::Literal(lit_pat) => {
+                            if let BasicValueEnum::IntValue(sv) = scrutinee {
+                                let lit = self.ctx.context.i64_type()
+                                    .const_int(lit_pat.value.parse().unwrap_or(0), true);
+                                let cmp = self.ctx.builder.build_int_compare(
+                                    IntPredicate::EQ, sv, lit, "match_cmp"
+                                ).unwrap();
+                                self.ctx.builder.build_conditional_branch(cmp, arm_blocks[i], next_bb).unwrap();
+                            } else {
+                                self.ctx.builder.build_unconditional_branch(next_bb).unwrap();
+                            }
+                        }
+                        rt_ast::pattern::Pattern::Wildcard(_) => {
+                            self.ctx.builder.build_unconditional_branch(arm_blocks[i]).unwrap();
+                        }
+                        _ => {
+                            self.ctx.builder.build_unconditional_branch(next_bb).unwrap();
+                        }
+                    }
+                }
+
+                let mut result = None;
+                for (i, arm) in match_expr.arms.iter().enumerate() {
+                    self.ctx.builder.position_at_end(arm_blocks[i]);
+                    if let Some(val) = self.codegen_expr(&arm.body) {
+                        result = Some(val);
+                    }
+                    self.ctx.builder.build_unconditional_branch(merge_block).unwrap();
+                }
+
+                self.ctx.builder.position_at_end(merge_block);
+                result
+            }
             _ => None,
         }
     }

@@ -134,6 +134,12 @@ echo "  [Phase C — compound data types]"
 run_test "struct basic"                  "phase_c/struct_basic.rs"        positive true
 run_test "struct field access"           "phase_c/struct_field_access.rs" positive true
 run_test "struct literal"                "phase_c/struct_literal.rs"      positive true
+run_test "tuple basic"                   "phase_c/tuple_basic.rs"         positive true
+run_test "tuple mixed"                   "phase_c/tuple_mixed.rs"         positive true
+run_test "tuple unit"                    "phase_c/tuple_unit.rs"          positive true
+run_test "match literal"                 "phase_c/match_literal.rs"       positive true
+run_test "match wildcard"                "phase_c/match_wildcard.rs"      positive true
+run_test "match single arm"              "phase_c/match_single_arm.rs"    positive true
 fi
 
 # ---- Negative Tests ----
@@ -158,6 +164,7 @@ run_test "continue outside loop"         "phase_b/neg_continue_outside_loop.rs" 
 echo "  [Phase C — negative]"
 run_test "field type mismatch"           "phase_c/neg_field_type_mismatch.rs"       negative false
 run_test "struct literal type mismatch"  "phase_c/neg_struct_literal_mismatch.rs"   negative false
+run_test "tuple type mismatch"           "phase_c/neg_tuple_type_mismatch.rs"       negative false
 fi
 
 # ---- IR Compare Tests ----

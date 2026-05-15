@@ -19,6 +19,7 @@ pub struct Parser<'a> {
     peek: Option<Token>,
     pub diagnostics: DiagnosticBag,
     file: Arc<SourceFile>,
+    allow_struct_literal: bool,
 }
 
 impl<'a> Parser<'a> {
@@ -28,6 +29,7 @@ impl<'a> Parser<'a> {
             peek: None,
             diagnostics: DiagnosticBag::new(),
             file,
+            allow_struct_literal: true,
         }
     }
 
@@ -708,28 +710,10 @@ impl<'a> Parser<'a> {
 
                 let path = PathExpr { segments: segments.clone(), span };
 
-                if self.eat(TokenKind::LBrace) {
-                    let mut fields = Vec::new();
-                    let mut base = None;
-                    while !self.at(TokenKind::RBrace) && !self.at(TokenKind::Eof) {
-                        if self.eat(TokenKind::DotDot) {
-                            base = Some(Box::new(self.parse_expr()));
-                            break;
-                        }
-                        let field_name = self.expect(TokenKind::Ident)
-                            .map(|t| self.lexer_slice(&t)).unwrap_or_default();
-                        let value = if self.eat(TokenKind::Colon) {
-                            self.parse_expr()
-                        } else {
-                            Expr::Ident(IdentExpr { name: field_name.clone(), span: Span::DUMMY })
-                        };
-                        fields.push((field_name, value));
-                        if !self.eat(TokenKind::Comma) {
-                            break;
-                        }
-                    }
+                if self.allow_struct_literal && self.eat(TokenKind::LBrace) {
+                    let fields = self.parse_struct_literal_body();
                     self.expect(TokenKind::RBrace);
-                    Expr::Struct(StructExpr { path, fields, base, span })
+                    Expr::Struct(StructExpr { path, fields, base: None, span })
                 } else if segments.len() == 1 && segments[0].args.is_none() {
                     Expr::Ident(IdentExpr {
                         name: segments.into_iter().next().unwrap().name,
@@ -857,6 +841,7 @@ impl<'a> Parser<'a> {
                 })
             }
             TokenKind::KwMatch => {
+                self.allow_struct_literal = false;
                 let scrutinee = self.parse_expr();
                 self.expect(TokenKind::LBrace);
                 let mut arms = Vec::new();
@@ -874,6 +859,7 @@ impl<'a> Parser<'a> {
                         break;
                     }
                 }
+                self.allow_struct_literal = true;
                 self.expect(TokenKind::RBrace);
                 Expr::Match(MatchExpr {
                     scrutinee: Box::new(scrutinee),
@@ -1339,5 +1325,28 @@ fn split_suffix(raw: &str) -> (String, Option<String>) {
         }
     } else {
         (raw.to_string(), None)
+    }
+}
+
+impl<'a> Parser<'a> {
+    fn parse_struct_literal_body(&mut self) -> Vec<(String, Expr)> {
+        let mut fields = Vec::new();
+        while !self.at(TokenKind::RBrace) && self.peek_tok().is_some() {
+            if self.eat(TokenKind::DotDot) {
+                break;
+            }
+            let field_name = self.expect(TokenKind::Ident)
+                .map(|t| self.lexer_slice(&t)).unwrap_or_default();
+            let value = if self.eat(TokenKind::Colon) {
+                self.parse_expr()
+            } else {
+                Expr::Ident(IdentExpr { name: field_name.clone(), span: Span::DUMMY })
+            };
+            fields.push((field_name, value));
+            if !self.eat(TokenKind::Comma) {
+                break;
+            }
+        }
+        fields
     }
 }

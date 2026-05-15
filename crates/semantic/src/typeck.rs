@@ -92,6 +92,10 @@ impl<'a> TypeChecker<'a> {
                     is_mut: r.is_mut,
                 }))
             }
+            rt_ast::ty::Ty::Tuple(t) => {
+                SemTy::Tuple(t.types.iter().map(|ty| self.ast_ty_to_sem(ty)).collect())
+            }
+            rt_ast::ty::Ty::Unit(_) => SemTy::Unit,
             _ => SemTy::Infer,
         }
     }
@@ -104,11 +108,19 @@ impl<'a> TypeChecker<'a> {
                     let sem_ty = ty.as_ref().map(|t| self.ast_ty_to_sem(t));
                     let init_ty = init.as_ref().map(|expr| self.infer_expr(expr, &expected_ret));
                     if let (Some(decl_ty), Some(inf_ty)) = (&sem_ty, &init_ty) {
-                        if decl_ty != &SemTy::Infer && inf_ty != &SemTy::Infer && decl_ty != inf_ty {
-                            self.error(
-                                format!("mismatched types: expected {}, found {}", decl_ty.name(), inf_ty.name()),
-                                init.as_ref().unwrap().span(),
-                            );
+                        if decl_ty != &SemTy::Infer && inf_ty != &SemTy::Infer {
+                            let mismatch = match (decl_ty, inf_ty) {
+                                (SemTy::Tuple(dt), SemTy::Tuple(it)) => {
+                                    dt.len() != it.len() || dt.iter().zip(it).any(|(d, i)| d != i && *d != SemTy::Infer && *i != SemTy::Infer)
+                                }
+                                _ => decl_ty != inf_ty,
+                            };
+                            if mismatch {
+                                self.error(
+                                    format!("mismatched types: expected {}, found {}", decl_ty.name(), inf_ty.name()),
+                                    init.as_ref().unwrap().span(),
+                                );
+                            }
                         }
                     }
                     let name = match pattern {
@@ -307,6 +319,31 @@ impl<'a> TypeChecker<'a> {
                 let rhs_ty = self.infer_expr(&assign_expr.rhs, &expected_ret);
                 self.infer_expr(&assign_expr.lhs, &expected_ret);
                 rhs_ty
+            }
+            Expr::Tuple(tuple_expr) => {
+                let types: Vec<SemTy> = tuple_expr.elements.iter()
+                    .map(|e| self.infer_expr(e, &expected_ret))
+                    .collect();
+                if types.is_empty() { SemTy::Unit } else { SemTy::Tuple(types) }
+            }
+            Expr::Match(match_expr) => {
+                self.infer_expr(&match_expr.scrutinee, &expected_ret);
+                let mut result_ty = SemTy::Infer;
+                for arm in &match_expr.arms {
+                    if let Some(guard) = &arm.guard {
+                        self.infer_expr(guard, &expected_ret);
+                    }
+                    let arm_ty = self.infer_expr(&arm.body, &expected_ret);
+                    if result_ty == SemTy::Infer {
+                        result_ty = arm_ty;
+                    }
+                }
+                result_ty
+            }
+            Expr::Index(index_expr) => {
+                self.infer_expr(&index_expr.base, &expected_ret);
+                self.infer_expr(&index_expr.index, &expected_ret);
+                SemTy::Infer
             }
             _ => SemTy::Infer,
         }

@@ -295,6 +295,31 @@ impl<'a> NameResolver<'a> {
                 self.resolve_block(&for_expr.body, scope, global);
             }
             Expr::Break(_) | Expr::Continue(_) => {}
+            Expr::Match(match_expr) => {
+                self.resolve_expr(&match_expr.scrutinee, scope, global);
+                for arm in &match_expr.arms {
+                    if let Some(guard) = &arm.guard {
+                        self.resolve_expr(guard, scope, global);
+                    }
+                    let name = match &arm.pattern {
+                        Pattern::Ident(p) => Some(p.name.clone()),
+                        _ => None,
+                    };
+                    if let Some(n) = name {
+                        scope.insert(n, SymbolEntry::Var(VarInfo { ty: None, is_mut: false }));
+                    }
+                    self.resolve_expr(&arm.body, scope, global);
+                }
+            }
+            Expr::Tuple(tuple_expr) => {
+                for elem in &tuple_expr.elements {
+                    self.resolve_expr(elem, scope, global);
+                }
+            }
+            Expr::Index(index_expr) => {
+                self.resolve_expr(&index_expr.base, scope, global);
+                self.resolve_expr(&index_expr.index, scope, global);
+            }
             _ => {}
         }
     }
