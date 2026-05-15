@@ -10,3 +10,11 @@ rt-ast.path = "../ast"
 rt-lexer.path = "../lexer"
 thiserror.workspace = true
 tracing.workspace = true
+
+[[example]]
+name = "parse_test"
+path = "examples/parse_test.rs"
+
+[[example]]
+name = "res_test"
+path = "examples/res_test.rs"

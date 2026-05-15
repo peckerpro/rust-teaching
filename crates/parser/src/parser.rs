@@ -76,7 +76,10 @@ impl<'a> Parser<'a> {
 
     pub fn parse_program(&mut self) -> Vec<Item> {
         let mut items = Vec::new();
-        while !self.at(TokenKind::Eof) {
+        loop {
+            if self.peek_tok().is_none() {
+                break;
+            }
             if let Some(item) = self.parse_item() {
                 items.push(item);
             } else {
@@ -1216,9 +1219,8 @@ impl<'a> Parser<'a> {
 
     fn parse_call(parser: &mut Parser, func: Expr) -> Expr {
         let func_span = func.span();
-        parser.expect(TokenKind::LParen);
         let mut args = Vec::new();
-        while !parser.at(TokenKind::RParen) && !parser.at(TokenKind::Eof) {
+        while !parser.at(TokenKind::RParen) && parser.peek_tok().is_some() {
             args.push(parser.parse_expr());
             if !parser.eat(TokenKind::Comma) {
                 break;
@@ -1231,7 +1233,6 @@ impl<'a> Parser<'a> {
 
     fn parse_index(parser: &mut Parser, base: Expr) -> Expr {
         let base_span = base.span();
-        parser.expect(TokenKind::LBracket);
         let index = parser.parse_expr();
         parser.expect(TokenKind::RBracket);
         let span = base_span.to(parser.peek_tok().map_or(base_span, |t| t.span));
@@ -1240,7 +1241,6 @@ impl<'a> Parser<'a> {
 
     fn parse_field(parser: &mut Parser, base: Expr) -> Expr {
         let base_span = base.span();
-        parser.expect(TokenKind::Dot);
         let tok = parser.expect(TokenKind::Ident).unwrap();
         let field = parser.lexer_slice(&tok);
         Expr::Field(FieldExpr { base: Box::new(base), field, span: base_span.to(tok.span) })
