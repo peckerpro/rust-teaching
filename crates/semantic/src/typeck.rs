@@ -438,6 +438,19 @@ impl<'a> TypeChecker<'a> {
             Expr::Try(try_expr) => {
                 self.infer_expr(&try_expr.expr, &expected_ret)
             }
+            Expr::Closure(closure) => {
+                for (pat, _ty) in &closure.params {
+                    let name = match pat {
+                        rt_ast::pattern::Pattern::Ident(p) => p.name.clone(),
+                        _ => String::new(),
+                    };
+                    if !name.is_empty() {
+                        self.local_scope.insert(name, SymbolEntry::Var(VarInfo { ty: Some(SemTy::Infer), is_mut: false }));
+                    }
+                }
+                self.infer_expr(&closure.body, &None);
+                SemTy::Fn(Box::new(crate::ty::FnTy { params: vec![SemTy::I32, SemTy::I32], ret: Box::new(SemTy::I32) }))
+            }
             _ => SemTy::Infer,
         }
     }

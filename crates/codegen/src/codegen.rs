@@ -516,6 +516,10 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             Expr::Try(try_expr) => {
                 self.codegen_expr(&try_expr.expr)
             }
+            Expr::Closure(_closure) => {
+                // Closures: type-check valid, codegen deferred
+                None
+            }
             _ => None,
         }
     }
