@@ -61,6 +61,7 @@ impl<'a> NameResolver<'a> {
         scope.insert("Err".into(), SymbolEntry::Fn(FnInfo { params: vec![SemTy::Infer], ret: Some(SemTy::Infer), generics: vec![] }));
         scope.insert("Some".into(), SymbolEntry::Fn(FnInfo { params: vec![SemTy::Infer], ret: Some(SemTy::Infer), generics: vec![] }));
         scope.insert("None".into(), SymbolEntry::Fn(FnInfo { params: vec![], ret: Some(SemTy::Infer), generics: vec![] }));
+        scope.insert("println".into(), SymbolEntry::Fn(FnInfo { params: vec![SemTy::Infer], ret: Some(SemTy::Unit), generics: vec![] }));
 
         for item in items {
             self.resolve_item(item, &mut scope, &self.scope.clone());

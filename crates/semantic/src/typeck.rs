@@ -197,9 +197,6 @@ impl<'a> TypeChecker<'a> {
                         _ => String::new(),
                     };
                     if !name.is_empty() {
-                        if self.local_scope.lookup_local(&name).is_some() {
-                            self.error(format!("duplicate declaration of `{}`", name), Span::DUMMY);
-                        }
                         self.local_scope.insert(name, SymbolEntry::Var(VarInfo { ty: sem_ty, is_mut: false }));
                     }
                 }

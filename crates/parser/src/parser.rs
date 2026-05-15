@@ -686,6 +686,9 @@ impl<'a> Parser<'a> {
                 span: tok.span,
             }),
             TokenKind::Ident | TokenKind::KwSelfLower | TokenKind::KwSelfType => {
+                let ident_name = self.lexer_slice(&tok);
+                let macro_call = self.eat(TokenKind::Not);
+
                 let mut segments = vec![PathSegment {
                     name: self.lexer_slice(&tok),
                     args: None,
@@ -713,7 +716,16 @@ impl<'a> Parser<'a> {
 
                 let path = PathExpr { segments: segments.clone(), span };
 
-                if self.allow_struct_literal && self.eat(TokenKind::LBrace) {
+                if macro_call && self.at(TokenKind::LParen) {
+                    self.expect(TokenKind::LParen);
+                    let args = self.parse_call_args();
+                    let span = tok.span.to(self.peek_tok().map_or(tok.span, |t| t.span));
+                    Expr::Call(CallExpr {
+                        func: Box::new(Expr::Ident(IdentExpr { name: ident_name, span: tok.span })),
+                        args,
+                        span,
+                    })
+                } else if self.allow_struct_literal && self.eat(TokenKind::LBrace) {
                     let fields = self.parse_struct_literal_body();
                     self.expect(TokenKind::RBrace);
                     Expr::Struct(StructExpr { path, fields, base: None, span })
@@ -801,18 +813,26 @@ impl<'a> Parser<'a> {
                 Expr::Block(Block::new(stmts, expr, span))
             }
             TokenKind::LBracket => {
-                let mut elements = Vec::new();
-                while !self.at(TokenKind::RBracket) && !self.at(TokenKind::Eof) {
-                    elements.push(self.parse_expr());
-                    if !self.eat(TokenKind::Comma) {
-                        break;
+                let first = self.parse_expr();
+                if self.eat(TokenKind::Semi) {
+                    let count = self.parse_expr();
+                    self.expect(TokenKind::RBracket);
+                    Expr::Array(ArrayExpr {
+                        elements: vec![count],
+                        span: tok.span.to(self.peek_tok().map_or(tok.span, |t| t.span)),
+                    })
+                } else {
+                    let mut elements = vec![first];
+                    while !self.at(TokenKind::RBracket) && !self.at(TokenKind::Eof) {
+                        if !self.eat(TokenKind::Comma) { break; }
+                        elements.push(self.parse_expr());
                     }
+                    self.expect(TokenKind::RBracket);
+                    Expr::Array(ArrayExpr {
+                        elements,
+                        span: tok.span.to(self.peek_tok().map_or(tok.span, |t| t.span)),
+                    })
                 }
-                self.expect(TokenKind::RBracket);
-                Expr::Array(ArrayExpr {
-                    elements,
-                    span: tok.span.to(self.peek_tok().map_or(tok.span, |t| t.span)),
-                })
             }
             TokenKind::KwIf => self.parse_if_expr(tok.span),
             TokenKind::KwLoop => {
@@ -1238,16 +1258,22 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn parse_call(parser: &mut Parser, func: Expr) -> Expr {
-        let func_span = func.span();
+    fn parse_call_args(&mut self) -> Vec<Expr> {
         let mut args = Vec::new();
-        while !parser.at(TokenKind::RParen) && parser.peek_tok().is_some() {
-            args.push(parser.parse_expr());
-            if !parser.eat(TokenKind::Comma) {
+        while !self.at(TokenKind::RParen) && self.peek_tok().is_some() {
+            args.push(self.parse_expr());
+            if !self.eat(TokenKind::Comma) {
                 break;
             }
         }
-        parser.expect(TokenKind::RParen);
+        self.expect(TokenKind::RParen);
+        args
+    }
+
+    fn parse_call(parser: &mut Parser, func: Expr) -> Expr {
+        let func_span = func.span();
+        // LParen already consumed by Pratt loop's self.bump()
+        let args = parser.parse_call_args();
         let span = func_span.to(parser.peek_tok().map_or(func_span, |t| t.span));
         Expr::Call(CallExpr { func: Box::new(func), args, span })
     }

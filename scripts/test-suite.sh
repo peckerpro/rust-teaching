@@ -102,6 +102,7 @@ run_test "function call (nested)"        "positive/fn_call_nested.rs"   positive
 run_test "multiple functions"            "positive/multi_fn.rs"         positive true
 run_test "fibonacci"                     "positive/fibonacci.rs"        positive true
 run_test "mutual recursion"              "positive/mutual_rec.rs"       positive true
+run_test "shadowing"                     "positive/shadowing.rs"         positive true
 echo "  [Phase A1 — extended integral types]"
 run_test "type i8"                       "phase_a1/type_i8.rs"           positive true
 run_test "type i16"                      "phase_a1/type_i16.rs"          positive true
@@ -156,7 +157,6 @@ echo "------------------------------------------"
 
 run_test "undefined variable"            "negative/undefined_var.rs"     negative false
 run_test "type mismatch (int vs bool)"   "negative/type_mismatch.rs"    negative false
-run_test "double declaration"            "negative/double_decl.rs"      negative false
 run_test "if condition not bool"         "negative/if_not_bool.rs"      negative false
 run_test "return type mismatch"          "negative/return_mismatch.rs"  negative false
 echo "  [Phase A1 — negative]"

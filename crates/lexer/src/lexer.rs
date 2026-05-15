@@ -189,6 +189,17 @@ impl<'a> Lexer<'a> {
             Token::new(TokenKind::BlockComment, self.span(start))
         }
     }
+    fn skip_attribute(&mut self) {
+        let mut depth = 1u32;
+        while depth > 0 && !self.cursor.is_eof() {
+            match self.cursor.advance() {
+                Some(b'[') => depth += 1,
+                Some(b']') => depth -= 1,
+                None => break,
+                _ => {}
+            }
+        }
+    }
 }
 
 impl<'a> Iterator for Lexer<'a> {
@@ -224,6 +235,10 @@ impl<'a> Iterator for Lexer<'a> {
             if b == b'#' && self.cursor.peek() == Some(b'!') {
                 self.cursor.advance();
                 let _ = self.lex_line_comment(start);
+                continue;
+            }
+            if b == b'#' && self.cursor.peek() == Some(b'[') {
+                self.skip_attribute();
                 continue;
             }
 
