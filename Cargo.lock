@@ -370,6 +370,7 @@ name = "rt-driver"
 version = "0.1.0"
 dependencies = [
  "ariadne",
+ "inkwell",
  "rt-ast",
  "rt-codegen",
  "rt-common",
