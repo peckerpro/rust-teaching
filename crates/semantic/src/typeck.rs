@@ -87,25 +87,45 @@ impl<'a> TypeChecker<'a> {
             match stmt {
                 Stmt::Let { pattern, ty, init, .. } => {
                     let sem_ty = ty.as_ref().map(|t| self.ast_ty_to_sem(t));
-                    if let Some(expr) = init {
-                        self.infer_expr(expr);
+                    let init_ty = init.as_ref().map(|expr| self.infer_expr(expr, &expected_ret));
+                    if let (Some(decl_ty), Some(inf_ty)) = (&sem_ty, &init_ty) {
+                        if decl_ty != &SemTy::Infer && inf_ty != &SemTy::Infer && decl_ty != inf_ty {
+                            self.error(
+                                format!("mismatched types: expected {}, found {}", decl_ty.name(), inf_ty.name()),
+                                init.as_ref().unwrap().span(),
+                            );
+                        }
                     }
                     let name = match pattern {
                         rt_ast::pattern::Pattern::Ident(p) => p.name.clone(),
                         _ => String::new(),
                     };
                     if !name.is_empty() {
+                        if self.local_scope.lookup_local(&name).is_some() {
+                            self.error(format!("duplicate declaration of `{}`", name), Span::DUMMY);
+                        }
                         self.local_scope.insert(name, SymbolEntry::Var(VarInfo { ty: sem_ty, is_mut: false }));
                     }
                 }
                 Stmt::Expr(e) => {
-                    self.infer_expr(e);
+                    let ty = self.infer_expr(e, &expected_ret);
+                    if let Expr::Return(ret) = e {
+                        if let Some(expected) = &expected_ret {
+                            let actual = ret.expr.as_ref().map(|_| ty.clone()).unwrap_or(SemTy::Unit);
+                            if expected != &SemTy::Infer && actual != SemTy::Infer && expected != &actual {
+                                self.error(
+                                    format!("mismatched return type: expected {}, found {}", expected.name(), actual.name()),
+                                    ret.span,
+                                );
+                            }
+                        }
+                    }
                 }
                 _ => {}
             }
         }
         if let Some(expr) = &block.expr {
-            block_ty = self.infer_expr(expr);
+            block_ty = self.infer_expr(expr, &expected_ret);
             if let Some(ret) = &expected_ret {
                 if ret != &SemTy::Infer && block_ty != SemTy::Infer && ret != &block_ty {
                     self.error(
@@ -118,7 +138,7 @@ impl<'a> TypeChecker<'a> {
         block_ty
     }
 
-    fn infer_expr(&mut self, expr: &Expr) -> SemTy {
+    fn infer_expr(&mut self, expr: &Expr, expected_ret: &Option<SemTy>) -> SemTy {
         match expr {
             Expr::Literal(lit) => match lit.kind {
                 LiteralKind::Integer => SemTy::I32,
@@ -139,8 +159,8 @@ impl<'a> TypeChecker<'a> {
                 }
             }
             Expr::Binary(bin) => {
-                let lhs_ty = self.infer_expr(&bin.lhs);
-                let rhs_ty = self.infer_expr(&bin.rhs);
+                let lhs_ty = self.infer_expr(&bin.lhs, &expected_ret);
+                let rhs_ty = self.infer_expr(&bin.rhs, &expected_ret);
                 match bin.op {
                     BinOp::Add | BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::Rem => lhs_ty,
                     BinOp::Eq | BinOp::Ne | BinOp::Lt | BinOp::Gt | BinOp::Le | BinOp::Ge => SemTy::Bool,
@@ -149,26 +169,31 @@ impl<'a> TypeChecker<'a> {
                 }
             }
             Expr::Unary(un) => {
-                let ty = self.infer_expr(&un.expr);
+                let ty = self.infer_expr(&un.expr, &expected_ret);
                 match un.op {
                     UnaryOp::Not => SemTy::Bool,
                     _ => ty,
                 }
             }
             Expr::Call(call) => {
-                self.infer_expr(&call.func);
-                for arg in &call.args {
-                    self.infer_expr(arg);
+                self.infer_expr(&call.func, &expected_ret);
+            for arg in &call.args {
+                    self.infer_expr(arg, &expected_ret);
                 }
                 SemTy::Infer
             }
             Expr::If(if_expr) => {
-                self.infer_expr(&if_expr.condition);
-                self.check_block(&if_expr.then_branch, None);
-                if let Some(else_expr) = &if_expr.else_branch {
-                    self.infer_expr(else_expr);
+                let cond_ty = self.infer_expr(&if_expr.condition, &expected_ret);
+                if cond_ty != SemTy::Bool && cond_ty != SemTy::Infer {
+                    self.error("if condition must be bool".into(), if_expr.condition.span());
                 }
-                SemTy::Unit
+                let then_ty = self.check_block(&if_expr.then_branch, None);
+                let else_ty = if let Some(else_expr) = &if_expr.else_branch {
+                    self.infer_expr(else_expr, &expected_ret)
+                } else {
+                    SemTy::Unit
+                };
+                if then_ty == else_ty { then_ty } else { SemTy::Unit }
             }
             Expr::Block(block) => {
                 let mut block_scope = Scope::child(self.local_scope.clone());
@@ -179,7 +204,7 @@ impl<'a> TypeChecker<'a> {
             }
             Expr::Return(ret) => {
                 if let Some(e) = &ret.expr {
-                    self.infer_expr(e)
+                    self.infer_expr(e, &expected_ret)
                 } else {
                     SemTy::Unit
                 }
@@ -189,12 +214,12 @@ impl<'a> TypeChecker<'a> {
                 SemTy::Unit
             }
             Expr::While(while_expr) => {
-                self.infer_expr(&while_expr.condition);
+                self.infer_expr(&while_expr.condition, &expected_ret);
                 self.check_block(&while_expr.body, None);
                 SemTy::Unit
             }
             Expr::For(for_expr) => {
-                self.infer_expr(&for_expr.iterable);
+                self.infer_expr(&for_expr.iterable, &expected_ret);
                 self.check_block(&for_expr.body, None);
                 SemTy::Unit
             }

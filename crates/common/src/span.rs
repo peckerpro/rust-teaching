@@ -49,7 +49,7 @@ impl From<u32> for BytePos {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct SourceFile {
     pub name: String,
     pub src: String,

@@ -338,8 +338,14 @@ name = "rt-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "inkwell",
+ "rt-ast",
+ "rt-codegen",
  "rt-common",
  "rt-driver",
+ "rt-lexer",
+ "rt-parser",
+ "rt-semantic",
  "tracing",
  "tracing-subscriber",
 ]

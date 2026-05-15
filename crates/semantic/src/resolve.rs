@@ -147,9 +147,10 @@ impl<'a> NameResolver<'a> {
                 let ret_ty = fn_item.ret_ty.as_ref().map(|t| self.convert_ty(t));
                 let fn_info = FnInfo {
                     params: fn_item.params.iter().map(|p| self.convert_ty(&p.ty)).collect(),
-                    ret: ret_ty,
+                    ret: ret_ty.clone(),
                     generics: vec![],
                 };
+                fn_scope.insert(fn_item.name.clone(), SymbolEntry::Fn(fn_info.clone()));
                 scope.insert(fn_item.name.clone(), SymbolEntry::Fn(fn_info));
 
                 if let Some(body) = &fn_item.body {
@@ -242,7 +243,7 @@ impl<'a> NameResolver<'a> {
     fn resolve_expr(&mut self, expr: &Expr, scope: &mut Scope, global: &Scope) {
         match expr {
             Expr::Ident(ident) => {
-                if scope.lookup(&ident.name).is_none() {
+                if scope.lookup(&ident.name).is_none() && global.lookup(&ident.name).is_none() {
                     self.error(format!("cannot find value `{}` in this scope", ident.name), ident.span);
                 }
             }

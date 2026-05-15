@@ -11,6 +11,12 @@ path = "src/main.rs"
 [dependencies]
 rt-common.path = "../common"
 rt-driver.path = "../driver"
+rt-lexer.path = "../lexer"
+rt-parser.path = "../parser"
+rt-ast.path = "../ast"
+rt-semantic.path = "../semantic"
+rt-codegen.path = "../codegen"
 clap.workspace = true
+inkwell.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
