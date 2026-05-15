@@ -1,0 +1,16 @@
+[package]
+name = "rt-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rtc"
+path = "src/main.rs"
+
+[dependencies]
+rt-common.path = "../common"
+rt-driver.path = "../driver"
+clap.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

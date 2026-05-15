@@ -1,0 +1,12 @@
+[package]
+name = "rt-parser"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rt-common.path = "../common"
+rt-ast.path = "../ast"
+rt-lexer.path = "../lexer"
+thiserror.workspace = true
+tracing.workspace = true

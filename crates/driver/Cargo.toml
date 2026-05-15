@@ -1,0 +1,17 @@
+[package]
+name = "rt-driver"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rt-common.path = "../common"
+rt-lexer.path = "../lexer"
+rt-parser.path = "../parser"
+rt-ast.path = "../ast"
+rt-semantic.path = "../semantic"
+rt-codegen.path = "../codegen"
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+ariadne.workspace = true
