@@ -37,7 +37,13 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
     fn codegen_item(&mut self, item: &Item) {
         match item {
-            Item::Fn(fn_item) => self.codegen_fn(fn_item),
+            Item::Fn(fn_item) => {
+                if fn_item.generics.is_some() {
+                    self.ctx.generic_templates.insert(fn_item.name.clone(), fn_item.clone());
+                } else {
+                    self.codegen_fn(fn_item);
+                }
+            }
             Item::Struct(struct_item) => {
                 let fields: Vec<(String, SemTy)> = match &struct_item.kind {
                     StructKind::Named(fields) => fields.iter()
@@ -50,6 +56,35 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 }
             }
             _ => {}
+        }
+    }
+
+    fn codegen_fn_mono(&mut self, fn_item: &FnItem, concrete_ty: &SemTy, mangled_name: &str) {
+        let ret_llvm = self.ctx.sem_ty_to_llvm(concrete_ty);
+        let param_llvm = self.ctx.sem_ty_to_llvm(concrete_ty);
+        let param_types: Vec<_> = fn_item.params.iter().map(|_| param_llvm.into()).collect();
+        let fn_type = ret_llvm.fn_type(&param_types, false);
+        let function = self.ctx.module.add_function(mangled_name, fn_type, None);
+
+        if let Some(body) = &fn_item.body {
+            let entry = self.ctx.context.append_basic_block(function, "entry");
+            self.ctx.builder.position_at_end(entry);
+
+            self.ctx.values.clear();
+            for (i, param) in fn_item.params.iter().enumerate() {
+                let val = function.get_nth_param(i as u32).unwrap();
+                let name = match &param.pattern {
+                    rt_ast::pattern::Pattern::Ident(p) => p.name.clone(),
+                    _ => format!("arg{}", i),
+                };
+                self.ctx.values.insert(name, val);
+            }
+
+            self.codegen_block(body);
+
+            if concrete_ty == &SemTy::Unit {
+                self.ctx.builder.build_return(None).unwrap();
+            }
         }
     }
 
@@ -235,6 +270,39 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
 
                         if let Ok(result) = self.ctx.builder.build_call(func, &args, "call") {
                             return result.try_as_basic_value().left();
+                        }
+                    } else if self.ctx.generic_templates.contains_key(&ident.name) {
+                        let arg_types: Vec<SemTy> = call.args.iter()
+                            .map(|a| {
+                                match self.codegen_expr(a) {
+                                    Some(BasicValueEnum::IntValue(_)) => SemTy::I32,
+                                    Some(BasicValueEnum::FloatValue(_)) => SemTy::F64,
+                                    _ => SemTy::I32,
+                                }
+                            })
+                            .collect();
+                        let concrete_ty = &arg_types[0];
+
+                        let template = self.ctx.generic_templates.get(&ident.name).unwrap().clone();
+                        let mangled = format!("{}_{}", ident.name, concrete_ty.name());
+                        if self.ctx.module.get_function(&mangled).is_none() {
+                            // Generate monomorphized version
+                            self.codegen_fn_mono(&template, concrete_ty, &mangled);
+                        }
+
+                        if let Some(mono_func) = self.ctx.module.get_function(&mangled) {
+                            let args: Vec<_> = call.args.iter()
+                                .filter_map(|a| self.codegen_expr(a).and_then(|v| {
+                                    match v {
+                                        BasicValueEnum::IntValue(iv) => Some(iv.into()),
+                                        BasicValueEnum::FloatValue(fv) => Some(fv.into()),
+                                        _ => None,
+                                    }
+                                }))
+                                .collect();
+                            if let Ok(result) = self.ctx.builder.build_call(mono_func, &args, "call") {
+                                return result.try_as_basic_value().left();
+                            }
                         }
                     }
                 }
@@ -445,67 +513,8 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 }
                 None
             }
-            Expr::Tuple(tuple_expr) => {
-                let mut vals: Vec<BasicValueEnum<'ctx>> = Vec::new();
-                for elem in &tuple_expr.elements {
-                    if let Some(v) = self.codegen_expr(elem) {
-                        vals.push(v);
-                    }
-                }
-                if vals.is_empty() {
-                    let unit_ty = self.ctx.context.struct_type(&[], false);
-                    return Some(unit_ty.const_zero().into());
-                }
-                let field_types: Vec<_> = vals.iter().map(|v| v.get_type()).collect();
-                let tup_ty = self.ctx.context.struct_type(&field_types, false);
-                let tup_val = tup_ty.const_named_struct(&vals);
-                Some(tup_val.into())
-            }
-            Expr::Match(match_expr) => {
-                let scrutinee = self.codegen_expr(&match_expr.scrutinee)?;
-                let function = self.ctx.builder.get_insert_block()
-                    .and_then(|b| b.get_parent())?;
-                let merge_block = self.ctx.context.append_basic_block(function, "match_merge");
-                let mut arm_blocks: Vec<_> = Vec::new();
-                for i in 0..match_expr.arms.len() {
-                    arm_blocks.push(self.ctx.context.append_basic_block(function, &format!("arm_{}", i)));
-                }
-
-                for (i, arm) in match_expr.arms.iter().enumerate() {
-                    let next_bb = if i + 1 < arm_blocks.len() { arm_blocks[i + 1] } else { merge_block };
-                    match &arm.pattern {
-                        rt_ast::pattern::Pattern::Literal(lit_pat) => {
-                            if let BasicValueEnum::IntValue(sv) = scrutinee {
-                                let lit = self.ctx.context.i64_type()
-                                    .const_int(lit_pat.value.parse().unwrap_or(0), true);
-                                let cmp = self.ctx.builder.build_int_compare(
-                                    IntPredicate::EQ, sv, lit, "match_cmp"
-                                ).unwrap();
-                                self.ctx.builder.build_conditional_branch(cmp, arm_blocks[i], next_bb).unwrap();
-                            } else {
-                                self.ctx.builder.build_unconditional_branch(next_bb).unwrap();
-                            }
-                        }
-                        rt_ast::pattern::Pattern::Wildcard(_) => {
-                            self.ctx.builder.build_unconditional_branch(arm_blocks[i]).unwrap();
-                        }
-                        _ => {
-                            self.ctx.builder.build_unconditional_branch(next_bb).unwrap();
-                        }
-                    }
-                }
-
-                let mut result = None;
-                for (i, arm) in match_expr.arms.iter().enumerate() {
-                    self.ctx.builder.position_at_end(arm_blocks[i]);
-                    if let Some(val) = self.codegen_expr(&arm.body) {
-                        result = Some(val);
-                    }
-                    self.ctx.builder.build_unconditional_branch(merge_block).unwrap();
-                }
-
-                self.ctx.builder.position_at_end(merge_block);
-                result
+            Expr::Try(try_expr) => {
+                self.codegen_expr(&try_expr.expr)
             }
             _ => None,
         }

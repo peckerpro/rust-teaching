@@ -176,6 +176,10 @@ run_test "use after move"                "phase_d/neg_use_after_move.rs"        
 run_test "move into fn (use after)"      "phase_d/neg_move_into_fn.rs"            negative false
 run_test "shared + mut borrow"           "phase_d/neg_shared_and_mut.rs"          negative false
 run_test "use while mut borrowed"        "phase_d/neg_use_while_mut_borrowed.rs"  negative false
+echo "  [Phase E — generics]"
+run_test "generic id i32"                "phase_e/generic_id_i32.rs"      positive true
+run_test "generic id f64"                "phase_e/generic_id_f64.rs"      positive true
+run_test "generic multi call"            "phase_e/generic_multi_call.rs"  positive true
 fi
 
 # ---- IR Compare Tests ----

@@ -321,6 +321,9 @@ impl<'a> NameResolver<'a> {
                 self.resolve_expr(&index_expr.base, scope, global);
                 self.resolve_expr(&index_expr.index, scope, global);
             }
+            Expr::Try(try_expr) => {
+                self.resolve_expr(&try_expr.expr, scope, global);
+            }
             _ => {}
         }
     }

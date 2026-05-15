@@ -1216,6 +1216,7 @@ impl<'a> Parser<'a> {
             TokenKind::LParen => Some((OpKind::Postfix(Box::new(Self::parse_call)), PREC_CALL, PREC_CALL)),
             TokenKind::LBracket => Some((OpKind::Postfix(Box::new(Self::parse_index)), PREC_CALL, PREC_CALL)),
             TokenKind::Dot => Some((OpKind::Postfix(Box::new(Self::parse_field)), PREC_FIELD, PREC_FIELD)),
+            TokenKind::Question => Some((OpKind::Postfix(Box::new(Self::parse_try)), PREC_CALL, PREC_CALL)),
             _ => None,
         }
     }
@@ -1247,6 +1248,11 @@ impl<'a> Parser<'a> {
         let tok = parser.expect(TokenKind::Ident).unwrap();
         let field = parser.lexer_slice(&tok);
         Expr::Field(FieldExpr { base: Box::new(base), field, span: base_span.to(tok.span) })
+    }
+
+    fn parse_try(parser: &mut Parser, base: Expr) -> Expr {
+        let span = base.span().to(parser.peek_tok().map_or(base.span(), |t| t.span));
+        Expr::Try(TryExpr { expr: Box::new(base), span })
     }
 
     fn infix_op(&self, tok: &Token) -> Option<(OpKind, u8, u8)> {

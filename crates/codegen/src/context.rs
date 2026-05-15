@@ -6,6 +6,7 @@ use inkwell::types::{BasicType, BasicTypeEnum, StructType};
 use inkwell::basic_block::BasicBlock;
 use std::collections::HashMap;
 use rt_semantic::ty::SemTy;
+use rt_ast::item::FnItem as AstFnItem;
 
 pub struct CodegenContext<'ctx> {
     pub context: &'ctx Context,
@@ -14,6 +15,7 @@ pub struct CodegenContext<'ctx> {
     pub values: HashMap<String, BasicValueEnum<'ctx>>,
     pub loop_stack: Vec<(BasicBlock<'ctx>, BasicBlock<'ctx>)>,
     pub struct_types: HashMap<String, (StructType<'ctx>, Vec<String>)>,
+    pub generic_templates: HashMap<String, AstFnItem>,
 }
 
 impl<'ctx> CodegenContext<'ctx> {
@@ -27,6 +29,7 @@ impl<'ctx> CodegenContext<'ctx> {
             values: HashMap::new(),
             loop_stack: Vec::new(),
             struct_types: HashMap::new(),
+            generic_templates: HashMap::new(),
         }
     }
 

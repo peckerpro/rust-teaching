@@ -435,6 +435,9 @@ impl<'a> TypeChecker<'a> {
                 self.infer_expr(&index_expr.index, &expected_ret);
                 SemTy::Infer
             }
+            Expr::Try(try_expr) => {
+                self.infer_expr(&try_expr.expr, &expected_ret)
+            }
             _ => SemTy::Infer,
         }
     }

@@ -31,6 +31,7 @@ pub enum Expr {
     Tuple(TupleExpr),
     Array(ArrayExpr),
     Range(RangeExpr),
+    Try(TryExpr),
     Underscore(Span),
 }
 
@@ -61,6 +62,7 @@ impl Expr {
             Expr::Tuple(e) => e.span,
             Expr::Array(e) => e.span,
             Expr::Range(e) => e.span,
+            Expr::Try(e) => e.span,
             Expr::Underscore(s) => *s,
         }
     }
@@ -273,5 +275,11 @@ pub struct RangeExpr {
     pub lhs: Option<Box<Expr>>,
     pub rhs: Option<Box<Expr>>,
     pub inclusive: bool,
+    pub span: Span,
+}
+
+#[derive(Debug, Clone)]
+pub struct TryExpr {
+    pub expr: Box<Expr>,
     pub span: Span,
 }
