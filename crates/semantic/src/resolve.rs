@@ -57,6 +57,11 @@ impl<'a> NameResolver<'a> {
         scope.insert("str".into(), SymbolEntry::TypeAlias(TypeAliasInfo { ty: SemTy::Str }));
         scope.insert("usize".into(), SymbolEntry::TypeAlias(TypeAliasInfo { ty: SemTy::U64 }));
 
+        scope.insert("Ok".into(), SymbolEntry::Fn(FnInfo { params: vec![SemTy::Infer], ret: Some(SemTy::Infer), generics: vec![] }));
+        scope.insert("Err".into(), SymbolEntry::Fn(FnInfo { params: vec![SemTy::Infer], ret: Some(SemTy::Infer), generics: vec![] }));
+        scope.insert("Some".into(), SymbolEntry::Fn(FnInfo { params: vec![SemTy::Infer], ret: Some(SemTy::Infer), generics: vec![] }));
+        scope.insert("None".into(), SymbolEntry::Fn(FnInfo { params: vec![], ret: Some(SemTy::Infer), generics: vec![] }));
+
         for item in items {
             self.resolve_item(item, &mut scope, &self.scope.clone());
         }

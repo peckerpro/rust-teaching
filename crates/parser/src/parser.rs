@@ -607,17 +607,18 @@ impl<'a> Parser<'a> {
                 let span = tok.span.to(expr.span());
                 Expr::Unary(UnaryExpr { op: UnaryOp::Deref, expr: Box::new(expr), span })
             }
-            TokenKind::AndAnd | TokenKind::OrOr | TokenKind::EqEq | TokenKind::Ne
+            TokenKind::AndAnd | TokenKind::EqEq | TokenKind::Ne
             | TokenKind::Lt | TokenKind::Gt | TokenKind::Le | TokenKind::Ge
             | TokenKind::Plus | TokenKind::Slash | TokenKind::Percent
-            | TokenKind::Caret | TokenKind::Or | TokenKind::Shl | TokenKind::Shr
+            | TokenKind::Caret | TokenKind::Shl | TokenKind::Shr
             | TokenKind::PlusEq | TokenKind::MinusEq | TokenKind::StarEq | TokenKind::SlashEq
             | TokenKind::PercentEq | TokenKind::CaretEq | TokenKind::AndEq | TokenKind::OrEq
             | TokenKind::ShlEq | TokenKind::ShrEq | TokenKind::Eq
             | TokenKind::DotDot | TokenKind::DotDotEq | TokenKind::Comma | TokenKind::Semi
             | TokenKind::Colon | TokenKind::PathSep | TokenKind::RArrow | TokenKind::FatArrow
             | TokenKind::At | TokenKind::Dollar | TokenKind::Question
-            | TokenKind::RParen | TokenKind::RBrace | TokenKind::RBracket | TokenKind::Eof => {
+            | TokenKind::RParen | TokenKind::RBrace | TokenKind::RBracket | TokenKind::Eof
+            => {
                 self.bump();
                 self.diagnostics.error(
                     format!("unexpected token {}", tok.kind),
@@ -886,31 +887,47 @@ impl<'a> Parser<'a> {
                 Expr::Break(BreakExpr { expr, span: tok.span })
             }
             TokenKind::KwContinue => Expr::Continue(tok.span),
-            TokenKind::KwMove | TokenKind::OrOr => {
-                let is_move = tok.kind == TokenKind::KwMove;
+            TokenKind::OrOr => {
+                let lo = tok.span;
+                let body = self.parse_expr();
+                Expr::Closure(ClosureExpr {
+                    params: vec![],
+                    body: Box::new(body),
+                    is_move: false,
+                    span: lo.to(self.peek_tok().map_or(lo, |t| t.span)),
+                })
+            }
+            TokenKind::Or => {
+                let lo = tok.span;
                 let mut params = Vec::new();
-                if tok.kind == TokenKind::KwMove {
-                    self.expect(TokenKind::Or);
-                }
                 while !self.at(TokenKind::Or) && !self.at(TokenKind::Eof) {
                     let pattern = self.parse_pattern();
-                    let ty = if self.eat(TokenKind::Colon) {
-                        Some(self.parse_ty())
-                    } else {
-                        None
-                    };
+                    let ty = if self.eat(TokenKind::Colon) { Some(self.parse_ty()) } else { None };
                     params.push((pattern, ty));
-                    if !self.eat(TokenKind::Comma) {
-                        break;
-                    }
+                    if !self.eat(TokenKind::Comma) { break; }
                 }
                 self.expect(TokenKind::Or);
                 let body = self.parse_expr();
                 Expr::Closure(ClosureExpr {
-                    params,
-                    body: Box::new(body),
-                    is_move,
-                    span: tok.span.to(self.peek_tok().map_or(tok.span, |t| t.span)),
+                    params, body: Box::new(body), is_move: false,
+                    span: lo.to(self.peek_tok().map_or(lo, |t| t.span)),
+                })
+            }
+            TokenKind::KwMove => {
+                let lo = tok.span;
+                let mut params = Vec::new();
+                self.expect(TokenKind::Or);
+                while !self.at(TokenKind::Or) && !self.at(TokenKind::Eof) {
+                    let pattern = self.parse_pattern();
+                    let ty = if self.eat(TokenKind::Colon) { Some(self.parse_ty()) } else { None };
+                    params.push((pattern, ty));
+                    if !self.eat(TokenKind::Comma) { break; }
+                }
+                self.expect(TokenKind::Or);
+                let body = self.parse_expr();
+                Expr::Closure(ClosureExpr {
+                    params, body: Box::new(body), is_move: true,
+                    span: lo.to(self.peek_tok().map_or(lo, |t| t.span)),
                 })
             }
             TokenKind::Underscore => Expr::Underscore(tok.span),

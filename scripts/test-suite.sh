@@ -180,6 +180,15 @@ echo "  [Phase E — generics]"
 run_test "generic id i32"                "phase_e/generic_id_i32.rs"      positive true
 run_test "generic id f64"                "phase_e/generic_id_f64.rs"      positive true
 run_test "generic multi call"            "phase_e/generic_multi_call.rs"  positive true
+echo "  [Phase G — error handling]"
+run_test "try ok"                         "phase_g/try_ok.rs"              positive true
+run_test "option basic"                   "phase_g/option_basic.rs"        positive true
+run_test "result basic"                   "phase_g/result_basic.rs"        positive true
+echo "  [Phase H — closures]"
+run_test "closure typed"                  "phase_h/closure_typed.rs"       positive true
+run_test "closure compact"                "phase_h/closure_compact.rs"     positive true
+run_test "closure noparam"                "phase_h/closure_noparam.rs"     positive true
+run_test "closure capture"                "phase_h/closure_capture.rs"     positive true
 fi
 
 # ---- IR Compare Tests ----
