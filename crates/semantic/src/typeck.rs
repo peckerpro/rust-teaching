@@ -15,6 +15,13 @@ pub struct TypeChecker<'a> {
     local_scope: Scope,
     loop_depth: usize,
     moved_vars: std::collections::HashSet<String>,
+    borrow_state: std::collections::HashMap<String, BorrowInfo>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct BorrowInfo {
+    shared_count: u32,
+    has_mut: bool,
 }
 
 fn is_copy_type(ty: &SemTy) -> bool {
@@ -33,6 +40,7 @@ impl<'a> TypeChecker<'a> {
             local_scope: Scope::new(),
             loop_depth: 0,
             moved_vars: std::collections::HashSet::new(),
+            borrow_state: std::collections::HashMap::new(),
         }
     }
 
@@ -54,6 +62,37 @@ impl<'a> TypeChecker<'a> {
                         self.moved_vars.insert(ident.name.clone());
                     }
                 }
+            }
+        }
+    }
+
+    fn check_borrow(&mut self, name: &str, span: Span, is_mut: bool) {
+        if let Some(bi) = self.borrow_state.get(name) {
+            if is_mut {
+                if bi.shared_count > 0 || bi.has_mut {
+                    self.error(format!("cannot borrow `{}` as mutable because it is also borrowed as {}", name, if bi.has_mut { "mutable" } else { "immutable" }), span);
+                }
+            } else {
+                if bi.has_mut {
+                    self.error(format!("cannot borrow `{}` as immutable because it is also borrowed as mutable", name), span);
+                }
+            }
+        }
+    }
+
+    fn add_borrow(&mut self, name: &str, is_mut: bool) {
+        let entry = self.borrow_state.entry(name.to_string()).or_insert(BorrowInfo { shared_count: 0, has_mut: false });
+        if is_mut {
+            entry.has_mut = true;
+        } else {
+            entry.shared_count += 1;
+        }
+    }
+
+    fn check_mut_borrow_conflict(&mut self, name: &str, span: Span) {
+        if let Some(bi) = self.borrow_state.get(name) {
+            if bi.has_mut {
+                self.error(format!("cannot use `{}` because it was mutably borrowed", name), span);
             }
         }
     }
@@ -220,6 +259,7 @@ impl<'a> TypeChecker<'a> {
             }
             Expr::Ident(ident) => {
                 self.check_moved(&ident.name, ident.span);
+                self.check_mut_borrow_conflict(&ident.name, ident.span);
                 match self.lookup(&ident.name) {
                     Some(SymbolEntry::Var(v)) => v.ty.clone().unwrap_or(SemTy::Infer),
                     Some(SymbolEntry::Fn(_)) => SemTy::Infer,
@@ -243,6 +283,20 @@ impl<'a> TypeChecker<'a> {
                 let ty = self.infer_expr(&un.expr, &expected_ret);
                 match un.op {
                     UnaryOp::Not => SemTy::Bool,
+                    UnaryOp::Ref | UnaryOp::RefMut => {
+                        if let Expr::Ident(ident) = un.expr.as_ref() {
+                            let is_mut = matches!(un.op, UnaryOp::RefMut);
+                            self.check_borrow(&ident.name, ident.span, is_mut);
+                            self.add_borrow(&ident.name, is_mut);
+                        }
+                        SemTy::Ref(Box::new(crate::ty::RefTy { inner: Box::new(ty), is_mut: matches!(un.op, UnaryOp::RefMut) }))
+                    }
+                    UnaryOp::Deref => {
+                        match ty {
+                            SemTy::Ref(r) => *r.inner,
+                            _ => ty,
+                        }
+                    }
                     _ => ty,
                 }
             }

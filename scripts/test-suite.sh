@@ -144,6 +144,8 @@ echo "  [Phase D — ownership]"
 run_test "copy ok"                       "phase_d/copy_ok.rs"             positive true
 run_test "move struct"                   "phase_d/move_struct.rs"         positive true
 run_test "move into fn"                  "phase_d/move_into_fn.rs"        positive true
+run_test "borrow shared"                 "phase_d/borrow_shared.rs"       positive true
+run_test "borrow multi shared"           "phase_d/borrow_multi_shared.rs" positive true
 fi
 
 # ---- Negative Tests ----
@@ -172,6 +174,8 @@ run_test "tuple type mismatch"           "phase_c/neg_tuple_type_mismatch.rs"   
 echo "  [Phase D — negative]"
 run_test "use after move"                "phase_d/neg_use_after_move.rs"          negative false
 run_test "move into fn (use after)"      "phase_d/neg_move_into_fn.rs"            negative false
+run_test "shared + mut borrow"           "phase_d/neg_shared_and_mut.rs"          negative false
+run_test "use while mut borrowed"        "phase_d/neg_use_while_mut_borrowed.rs"  negative false
 fi
 
 # ---- IR Compare Tests ----
