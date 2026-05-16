@@ -217,9 +217,18 @@ impl<'a> TypeChecker<'a> {
                             }
                         }
                         rt_ast::pattern::Pattern::Tuple(t) => {
-                            for elem in &t.elements {
+                            let elem_tys: Vec<Option<SemTy>> = match sem_ty {
+                                Some(SemTy::Tuple(ref types)) => {
+                                    types.iter().enumerate().map(|(i, ty)| {
+                                        if i < t.elements.len() { Some(ty.clone()) } else { None }
+                                    }).collect()
+                                }
+                                _ => vec![None; t.elements.len()],
+                            };
+                            for (i, elem) in t.elements.iter().enumerate() {
                                 if let rt_ast::pattern::Pattern::Ident(p) = elem {
-                                    self.local_scope.insert(p.name.clone(), SymbolEntry::Var(VarInfo { ty: None, is_mut: false }));
+                                    let elem_ty = elem_tys.get(i).and_then(|t| t.clone());
+                                    self.local_scope.insert(p.name.clone(), SymbolEntry::Var(VarInfo { ty: elem_ty, is_mut: false }));
                                 }
                             }
                         }

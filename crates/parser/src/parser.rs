@@ -449,67 +449,38 @@ impl<'a> Parser<'a> {
         })
     }
 
-    pub fn parse_block(&mut self) -> Block {
+    fn parse_block_body(&mut self) -> Block {
         let lo = self.peek_tok().unwrap().span;
         self.expect(TokenKind::LBrace);
         let mut stmts = Vec::new();
         let mut expr = None;
-
         loop {
-            if self.peek_tok().is_none() {
-                break;
-            }
-            if self.at(TokenKind::RBrace) || self.at(TokenKind::Eof) {
-                break;
-            }
-
-            if let Some(item) = self.parse_item() {
-                stmts.push(Stmt::Item(item));
-                continue;
-            }
-
-            if self.at(TokenKind::Semi) {
-                self.bump();
-                stmts.push(Stmt::Semi);
-                continue;
-            }
-
+            if self.peek_tok().is_none() { break; }
+            if self.at(TokenKind::RBrace) { break; }
+            if let Some(item) = self.parse_item() { stmts.push(Stmt::Item(item)); continue; }
+            if self.at(TokenKind::Semi) { self.bump(); stmts.push(Stmt::Semi); continue; }
             if self.at(TokenKind::KwLet) {
                 let lo = self.bump().unwrap().span;
                 let pattern = self.parse_pattern();
-                let ty = if self.eat(TokenKind::Colon) {
-                    Some(self.parse_ty())
-                } else {
-                    None
-                };
-                let init = if self.eat(TokenKind::Eq) {
-                    Some(self.parse_expr())
-                } else {
-                    None
-                };
-                let span = lo.to(self.peek_tok().map_or(lo, |t| t.span));
-                if self.eat(TokenKind::Semi) {
-                    stmts.push(Stmt::Let { pattern, ty, init, span });
-                } else {
-                    self.expect(TokenKind::Semi);
-                }
+                let ty = if self.eat(TokenKind::Colon) { Some(self.parse_ty()) } else { None };
+                let init = if self.eat(TokenKind::Eq) { Some(self.parse_expr()) } else { None };
+                self.expect(TokenKind::Semi);
+                stmts.push(Stmt::Let { pattern, ty, init, span: lo.to(self.peek_tok().map_or(lo, |t| t.span)) });
                 continue;
             }
-
             let e = self.parse_expr();
-            if self.eat(TokenKind::Semi) {
-                stmts.push(Stmt::Expr(e));
-            } else if self.at(TokenKind::RBrace) {
-                expr = Some(Box::new(e));
-                break;
-            } else {
-                stmts.push(Stmt::Expr(e));
-            }
+            if self.eat(TokenKind::Semi) { stmts.push(Stmt::Expr(e)); }
+            else if self.at(TokenKind::RBrace) { expr = Some(Box::new(e)); break; }
+            else { stmts.push(Stmt::Expr(e)); }
         }
-
         let span = lo.to(self.peek_tok().map_or(lo, |t| t.span));
-        self.expect(TokenKind::RBrace);
         Block::new(stmts, expr, span)
+    }
+
+    pub fn parse_block(&mut self) -> Block {
+        let b = self.parse_block_body();
+        self.expect(TokenKind::RBrace);
+        b
     }
 
     pub fn parse_expr(&mut self) -> Expr {
@@ -980,12 +951,15 @@ impl<'a> Parser<'a> {
             let pattern = self.parse_pattern();
             self.expect(TokenKind::Eq);
             let scrutinee = self.parse_expr();
-            let then_branch = self.parse_block();
+            let then_branch = self.parse_block_body();
+            self.expect(TokenKind::RBrace); // consume the if-let body's closing }
             let else_branch = if self.eat(TokenKind::KwElse) {
                 if self.at(TokenKind::KwIf) {
                     Some(Box::new(self.parse_if_expr(lo)))
                 } else {
-                    Some(Box::new(Expr::Block(self.parse_block())))
+                    let b = self.parse_block_body();
+                    self.expect(TokenKind::RBrace);
+                    Some(Box::new(Expr::Block(b)))
                 }
             } else { None };
             let else_body = match else_branch {
