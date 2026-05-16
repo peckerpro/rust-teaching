@@ -151,13 +151,22 @@ impl<'a> Parser<'a> {
     fn parse_fn_param(&mut self) -> FnParam {
         let lo = self.peek_tok().unwrap().span;
         let pattern = self.parse_pattern();
-        self.expect(TokenKind::Colon);
-        let ty = self.parse_ty();
-        FnParam {
-            pattern,
-            ty,
-            span: lo.to(self.peek_tok().map_or(lo, |t| t.span)),
-        }
+        let is_self = match &pattern {
+            Pattern::Ref(r) => matches!(r.inner.as_ref(), Pattern::Ident(p) if p.name == "self"),
+            Pattern::Ident(p) => p.name == "self",
+            _ => false,
+        };
+        let ty = if is_self {
+            match &pattern {
+                Pattern::Ref(r) if r.is_mut => Ty::path_named("&Self".into(), lo),
+                Pattern::Ref(_) => Ty::path_named("&Self".into(), lo),
+                _ => Ty::path_named("Self".into(), lo),
+            }
+        } else {
+            self.expect(TokenKind::Colon);
+            self.parse_ty()
+        };
+        FnParam { pattern, ty, span: lo.to(self.peek_tok().map_or(lo, |t| t.span)) }
     }
 
     fn parse_struct_item(&mut self) -> Item {
@@ -997,7 +1006,7 @@ impl<'a> Parser<'a> {
 
     fn parse_pattern(&mut self) -> Pattern {
         match self.peek_tok().map(|t| t.kind.clone()) {
-            Some(TokenKind::Ident) => {
+            Some(TokenKind::Ident) | Some(TokenKind::KwSelfLower) | Some(TokenKind::KwSelfType) => {
                 let tok = self.bump().unwrap();
                 let name = self.lexer_slice(&tok);
                 let is_mut = name == "mut";

@@ -190,6 +190,41 @@ impl<'a> NameResolver<'a> {
                 let ty = c.ty.as_ref().map(|t| self.convert_ty(t)).unwrap_or(SemTy::Infer);
                 scope.insert(c.name.clone(), SymbolEntry::Var(VarInfo { ty: Some(ty), is_mut: false }));
             }
+            Item::Impl(impl_item) => {
+                let struct_name = match &impl_item.ty {
+                    AstTy::Path(p) => p.as_simple().map(|s| s.to_string()),
+                    _ => None,
+                };
+                for method in &impl_item.items {
+                    if let ImplItemKind::Fn(fn_item) = method {
+                        let fn_info = FnInfo {
+                            params: fn_item.params.iter().map(|p| self.convert_ty(&p.ty)).collect(),
+                            ret: fn_item.ret_ty.as_ref().map(|t| self.convert_ty(t)),
+                            generics: vec![],
+                        };
+                        scope.insert(fn_item.name.clone(), SymbolEntry::Fn(fn_info));
+
+                        let mut fn_scope = Scope::child(scope);
+                        // inject self if present
+                        for param in &fn_item.params {
+                            let name = match &param.pattern {
+                                Pattern::Ref(rp) => {
+                                    if let Pattern::Ident(ip) = rp.inner.as_ref() {
+                                        ip.name.clone()
+                                    } else { String::new() }
+                                }
+                                Pattern::Ident(ip) => ip.name.clone(),
+                                _ => String::new(),
+                            };
+                            let ty = self.convert_ty(&param.ty);
+                            fn_scope.insert(name, SymbolEntry::Var(VarInfo { ty: Some(ty), is_mut: false }));
+                        }
+                        if let Some(body) = &fn_item.body {
+                            self.resolve_block(body, &mut fn_scope, global);
+                        }
+                    }
+                }
+            }
             _ => {}
         }
     }

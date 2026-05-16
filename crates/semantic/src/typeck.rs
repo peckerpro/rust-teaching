@@ -158,6 +158,42 @@ impl<'a> TypeChecker<'a> {
                 let ty = c.ty.as_ref().map(|t| self.ast_ty_to_sem(t)).unwrap_or(SemTy::Infer);
                 self.local_scope.insert(c.name.clone(), SymbolEntry::Var(VarInfo { ty: Some(ty), is_mut: false }));
             }
+            Item::Impl(impl_item) => {
+                for method in &impl_item.items {
+                    if let ImplItemKind::Fn(fn_item) = method {
+                        let ret_ty = fn_item.ret_ty.as_ref()
+                            .map(|t| self.ast_ty_to_sem(t))
+                            .unwrap_or(SemTy::Unit);
+                        self.local_scope.insert(fn_item.name.clone(), SymbolEntry::Fn(FnInfo {
+                            params: fn_item.params.iter().map(|p| self.ast_ty_to_sem(&p.ty)).collect(),
+                            ret: Some(ret_ty.clone()),
+                            generics: vec![],
+                        }));
+                        if let Some(body) = &fn_item.body {
+                            let mut fn_scope = Scope::child(&self.local_scope);
+                            // Inject self parameter
+                            for param in &fn_item.params {
+                                let (name, ty) = match &param.pattern {
+                                    rt_ast::pattern::Pattern::Ref(rp) => {
+                                        let inner_ty = self.ast_ty_to_sem(&param.ty);
+                                        if let rt_ast::pattern::Pattern::Ident(ip) = rp.inner.as_ref() {
+                                            (ip.name.clone(), inner_ty)
+                                        } else { continue; }
+                                    }
+                                    rt_ast::pattern::Pattern::Ident(ip) => {
+                                        (ip.name.clone(), self.ast_ty_to_sem(&param.ty))
+                                    }
+                                    _ => continue,
+                                };
+                                fn_scope.insert(name, SymbolEntry::Var(VarInfo { ty: Some(ty), is_mut: false }));
+                            }
+                            std::mem::swap(&mut self.local_scope, &mut fn_scope);
+                            self.check_block(body, Some(ret_ty));
+                            std::mem::swap(&mut self.local_scope, &mut fn_scope);
+                        }
+                    }
+                }
+            }
             _ => {}
         }
     }

@@ -55,6 +55,17 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                     self.ctx.declare_struct(&struct_item.name, &fields);
                 }
             }
+            Item::Impl(impl_item) => {
+                for method in &impl_item.items {
+                    if let ImplItemKind::Fn(fn_item) = method {
+                        if fn_item.generics.is_some() {
+                            self.ctx.generic_templates.insert(fn_item.name.clone(), fn_item.clone());
+                        } else {
+                            self.codegen_fn(fn_item);
+                        }
+                    }
+                }
+            }
             _ => {}
         }
     }
