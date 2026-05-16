@@ -456,6 +456,9 @@ impl<'a> Parser<'a> {
         let mut expr = None;
 
         loop {
+            if self.peek_tok().is_none() {
+                break;
+            }
             if self.at(TokenKind::RBrace) || self.at(TokenKind::Eof) {
                 break;
             }
@@ -972,6 +975,33 @@ impl<'a> Parser<'a> {
     }
 
     fn parse_if_expr(&mut self, lo: Span) -> Expr {
+        if self.at(TokenKind::KwLet) {
+            self.bump();
+            let pattern = self.parse_pattern();
+            self.expect(TokenKind::Eq);
+            let scrutinee = self.parse_expr();
+            let then_branch = self.parse_block();
+            let else_branch = if self.eat(TokenKind::KwElse) {
+                if self.at(TokenKind::KwIf) {
+                    Some(Box::new(self.parse_if_expr(lo)))
+                } else {
+                    Some(Box::new(Expr::Block(self.parse_block())))
+                }
+            } else { None };
+            let else_body = match else_branch {
+                Some(b) => *b,
+                None => Expr::Tuple(TupleExpr { elements: vec![], span: Span::DUMMY }),
+            };
+            let arms = vec![
+                MatchArm { pattern, guard: None, body: Expr::Block(then_branch) },
+                MatchArm { pattern: Pattern::Wildcard(Span::DUMMY), guard: None, body: else_body },
+            ];
+            return Expr::Match(MatchExpr {
+                scrutinee: Box::new(scrutinee),
+                arms,
+                span: lo.to(self.peek_tok().map_or(lo, |t| t.span)),
+            });
+        }
         let condition = self.parse_expr();
         let then_branch = self.parse_block();
         let else_branch = if self.eat(TokenKind::KwElse) {
