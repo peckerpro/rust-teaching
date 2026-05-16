@@ -1288,9 +1288,15 @@ impl<'a> Parser<'a> {
 
     fn parse_field(parser: &mut Parser, base: Expr) -> Expr {
         let base_span = base.span();
-        let tok = parser.expect(TokenKind::Ident).unwrap();
-        let field = parser.lexer_slice(&tok);
-        Expr::Field(FieldExpr { base: Box::new(base), field, span: base_span.to(tok.span) })
+        if parser.at(TokenKind::Integer) {
+            let tok = parser.bump().unwrap();
+            let field = parser.lexer_slice(&tok);
+            Expr::Field(FieldExpr { base: Box::new(base), field, span: base_span.to(tok.span) })
+        } else {
+            let tok = parser.expect(TokenKind::Ident).unwrap();
+            let field = parser.lexer_slice(&tok);
+            Expr::Field(FieldExpr { base: Box::new(base), field, span: base_span.to(tok.span) })
+        }
     }
 
     fn parse_try(parser: &mut Parser, base: Expr) -> Expr {

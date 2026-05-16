@@ -5,7 +5,7 @@ use rt_common::diagnostic::DiagnosticBag;
 use rt_common::span::{SourceFile, Span};
 use std::sync::Arc;
 
-use crate::scope::{Scope, SymbolEntry, VarInfo};
+use crate::scope::{Scope, SymbolEntry, FnInfo, VarInfo};
 use crate::ty::SemTy;
 
 pub struct TypeChecker<'a> {
@@ -123,9 +123,20 @@ impl<'a> TypeChecker<'a> {
     fn check_item(&mut self, item: &Item) {
         match item {
             Item::Fn(fn_item) => {
+                let ret_ty = fn_item.ret_ty.as_ref()
+                    .map(|t| self.ast_ty_to_sem(t))
+                    .unwrap_or(SemTy::Unit);
+                let param_tys: Vec<SemTy> = fn_item.params.iter()
+                    .map(|p| self.ast_ty_to_sem(&p.ty))
+                    .collect();
+                let fn_info = FnInfo {
+                    params: param_tys,
+                    ret: Some(ret_ty.clone()),
+                    generics: vec![],
+                };
+                self.local_scope.insert(fn_item.name.clone(), SymbolEntry::Fn(fn_info));
+
                 if let Some(body) = &fn_item.body {
-                    let ret_ty = fn_item.ret_ty.as_ref()
-                        .map(|t| self.ast_ty_to_sem(t));
                     let mut fn_scope = Scope::child(&self.local_scope);
                     std::mem::swap(&mut self.local_scope, &mut fn_scope);
 
@@ -138,7 +149,7 @@ impl<'a> TypeChecker<'a> {
                         self.local_scope.insert(name, SymbolEntry::Var(VarInfo { ty: Some(ty), is_mut: false }));
                     }
 
-                    self.check_block(body, ret_ty);
+                    self.check_block(body, Some(ret_ty));
 
                     std::mem::swap(&mut self.local_scope, &mut fn_scope);
                 }
@@ -213,6 +224,9 @@ impl<'a> TypeChecker<'a> {
                             }
                         }
                     }
+                }
+                Stmt::Item(item) => {
+                    self.check_item(item);
                 }
                 _ => {}
             }

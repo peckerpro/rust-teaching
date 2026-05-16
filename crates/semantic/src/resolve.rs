@@ -239,6 +239,9 @@ impl<'a> NameResolver<'a> {
                 Stmt::Expr(e) => {
                     self.resolve_expr(e, scope, global);
                 }
+                Stmt::Item(item) => {
+                    self.resolve_item(item, scope, global);
+                }
                 _ => {}
             }
         }

@@ -156,6 +156,9 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 Stmt::Expr(e) => {
                     self.codegen_expr(e);
                 }
+                Stmt::Item(item) => {
+                    self.codegen_item(item);
+                }
                 _ => {}
             }
         }
