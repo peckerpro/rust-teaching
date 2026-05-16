@@ -523,9 +523,19 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             }
             Expr::Assign(assign_expr) => {
                 let rhs = self.codegen_expr(&assign_expr.rhs)?;
+                // Simple ident assignment
                 if let Expr::Ident(ident) = assign_expr.lhs.as_ref() {
                     self.ctx.values.insert(ident.name.clone(), rhs);
                     return Some(rhs);
+                }
+                // Deref assignment: *ptr = value
+                if let Expr::Unary(un) = assign_expr.lhs.as_ref() {
+                    if matches!(un.op, UnaryOp::Deref) {
+                        if let Expr::Ident(ident) = un.expr.as_ref() {
+                            self.ctx.values.insert(ident.name.clone(), rhs);
+                            return Some(rhs);
+                        }
+                    }
                 }
                 None
             }

@@ -154,6 +154,10 @@ impl<'a> TypeChecker<'a> {
                     std::mem::swap(&mut self.local_scope, &mut fn_scope);
                 }
             }
+            Item::Const(c) => {
+                let ty = c.ty.as_ref().map(|t| self.ast_ty_to_sem(t)).unwrap_or(SemTy::Infer);
+                self.local_scope.insert(c.name.clone(), SymbolEntry::Var(VarInfo { ty: Some(ty), is_mut: false }));
+            }
             _ => {}
         }
     }
@@ -181,6 +185,9 @@ impl<'a> TypeChecker<'a> {
         let mut block_ty = SemTy::Unit;
         for stmt in &block.stmts {
             match stmt {
+                Stmt::Item(item) => {
+                    self.check_item(item);
+                }
                 Stmt::Let { pattern, ty, init, .. } => {
                     let sem_ty = ty.as_ref().map(|t| self.ast_ty_to_sem(t));
                     let init_ty = init.as_ref().map(|expr| self.infer_expr(expr, &expected_ret));

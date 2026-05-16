@@ -597,9 +597,14 @@ impl<'a> Parser<'a> {
             }
             TokenKind::And => {
                 self.bump();
+                let is_mut = self.eat(TokenKind::KwMut);
                 let expr = self.parse_expr_bp(PREC_PREFIX);
                 let span = tok.span.to(expr.span());
-                Expr::Unary(UnaryExpr { op: UnaryOp::Ref, expr: Box::new(expr), span })
+                if is_mut {
+                    Expr::Unary(UnaryExpr { op: UnaryOp::RefMut, expr: Box::new(expr), span })
+                } else {
+                    Expr::Unary(UnaryExpr { op: UnaryOp::Ref, expr: Box::new(expr), span })
+                }
             }
             TokenKind::Star => {
                 self.bump();

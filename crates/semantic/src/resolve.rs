@@ -134,6 +134,10 @@ impl<'a> NameResolver<'a> {
             Item::TypeAlias(t) => {
                 self.scope.insert(t.name.clone(), SymbolEntry::TypeAlias(TypeAliasInfo { ty: SemTy::Infer }));
             }
+            Item::Const(c) => {
+                let ty = c.ty.as_ref().map(|t| self.convert_ty(t)).unwrap_or(SemTy::Infer);
+                self.scope.insert(c.name.clone(), SymbolEntry::Var(VarInfo { ty: Some(ty), is_mut: false }));
+            }
             _ => {}
         }
     }
@@ -181,6 +185,10 @@ impl<'a> NameResolver<'a> {
                     .map(|v| (v.name.clone(), v.fields.as_ref().map(|tys| tys.iter().map(|t| self.convert_ty(t)).collect())))
                     .collect();
                 scope.insert(e.name.clone(), SymbolEntry::Enum(EnumInfo { variants, generics: vec![] }));
+            }
+            Item::Const(c) => {
+                let ty = c.ty.as_ref().map(|t| self.convert_ty(t)).unwrap_or(SemTy::Infer);
+                scope.insert(c.name.clone(), SymbolEntry::Var(VarInfo { ty: Some(ty), is_mut: false }));
             }
             _ => {}
         }
