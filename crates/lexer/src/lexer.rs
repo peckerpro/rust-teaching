@@ -88,12 +88,15 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_char_or_byte(&mut self, start: usize, is_byte: bool) -> Token {
-        self.cursor.advance();
+        self.cursor.advance(); // consume opening quote (byte literal: cursor at ' after b)
+        self.lex_char_or_byte_inner(start, is_byte)
+    }
 
+    fn lex_char_or_byte_inner(&mut self, start: usize, is_byte: bool) -> Token {
         if self.cursor.eat_byte(b'\\') {
-            self.cursor.advance();
+            self.cursor.advance_char();
         } else if !self.cursor.is_eof() {
-            self.cursor.advance();
+            self.cursor.advance_char();
         }
 
         let _ = self.cursor.eat_byte(b'\'');
@@ -106,8 +109,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_string(&mut self, start: usize, is_byte: bool) -> Token {
-        self.cursor.advance();
+        self.cursor.advance(); // consume opening quote
+        self.lex_string_inner(start, is_byte)
+    }
 
+    fn lex_string_inner(&mut self, start: usize, is_byte: bool) -> Token {
         loop {
             match self.cursor.peek() {
                 Some(b'\"') => {
@@ -118,8 +124,9 @@ impl<'a> Lexer<'a> {
                     self.cursor.advance();
                     self.cursor.advance();
                 }
-                Some(_) => {
-                    self.cursor.advance();
+                Some(b) => {
+                    let w = utf8_byte_width(b);
+                    self.cursor.advance_n(w);
                 }
                 None => {
                     let file = self.cursor.file.clone();
@@ -276,8 +283,13 @@ impl<'a> Iterator for Lexer<'a> {
 
                 c if c.is_ascii_digit() => self.lex_number(start),
 
-                b'\'' => self.lex_char_or_byte(start, false),
-                b'"' => self.lex_string(start, false),
+                b'\'' => {
+                    // cursor already past opening quote (consumed by advance() above)
+                    self.lex_char_or_byte_inner(start, false)
+                },
+                b'"' => {
+                    self.lex_string_inner(start, false)
+                },
 
                 b'(' => Token::new(TokenKind::LParen, self.span(start)),
                 b')' => Token::new(TokenKind::RParen, self.span(start)),
@@ -439,6 +451,10 @@ impl<'a> Iterator for Lexer<'a> {
 }
 
 use rt_common::span::BytePos;
+
+fn utf8_byte_width(b: u8) -> usize {
+    if b < 0x80 { 1 } else if b < 0xE0 { 2 } else if b < 0xF0 { 3 } else { 4 }
+}
 
 #[cfg(test)]
 mod tests {

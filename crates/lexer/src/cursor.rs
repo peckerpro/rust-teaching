@@ -34,6 +34,17 @@ impl<'a> Cursor<'a> {
         Some(b)
     }
 
+    pub fn advance_char(&mut self) -> Option<u8> {
+        let b = self.peek()?;
+        let len = if b < 0x80 { 1 }
+                  else if (b & 0xE0) == 0xC0 { 2 }
+                  else if (b & 0xF0) == 0xE0 { 3 }
+                  else if (b & 0xF8) == 0xF0 { 4 }
+                  else { 1 }; // continuation bytes: treat as 1
+        self.pos += len;
+        Some(b)
+    }
+
     pub fn advance_n(&mut self, n: usize) {
         self.pos = (self.pos + n).min(self.src.len());
     }
@@ -71,4 +82,12 @@ impl<'a> Cursor<'a> {
             self.advance();
         }
     }
+}
+
+fn utf8_byte_width(b: u8) -> usize {
+    if b < 0x80 { 1 }
+    else if b < 0xC0 { 1 }
+    else if b < 0xE0 { 2 }
+    else if b < 0xF0 { 3 }
+    else { 4 }
 }
