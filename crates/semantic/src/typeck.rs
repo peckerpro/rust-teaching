@@ -203,12 +203,20 @@ impl<'a> TypeChecker<'a> {
                             }
                         }
                     }
-                    let name = match pattern {
-                        rt_ast::pattern::Pattern::Ident(p) => p.name.clone(),
-                        _ => String::new(),
-                    };
-                    if !name.is_empty() {
-                        self.local_scope.insert(name, SymbolEntry::Var(VarInfo { ty: sem_ty, is_mut: false }));
+                    match pattern {
+                        rt_ast::pattern::Pattern::Ident(p) => {
+                            if !p.name.is_empty() {
+                                self.local_scope.insert(p.name.clone(), SymbolEntry::Var(VarInfo { ty: sem_ty.clone(), is_mut: p.is_mut }));
+                            }
+                        }
+                        rt_ast::pattern::Pattern::Tuple(t) => {
+                            for elem in &t.elements {
+                                if let rt_ast::pattern::Pattern::Ident(p) = elem {
+                                    self.local_scope.insert(p.name.clone(), SymbolEntry::Var(VarInfo { ty: None, is_mut: false }));
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 Stmt::Expr(e) => {

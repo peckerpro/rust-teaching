@@ -230,11 +230,19 @@ impl<'a> NameResolver<'a> {
                     if let Some(expr) = init {
                         self.resolve_expr(expr, scope, global);
                     }
-                    let name = match pattern {
-                        Pattern::Ident(p) => p.name.clone(),
-                        _ => String::new(),
-                    };
-                    scope.insert(name, SymbolEntry::Var(VarInfo { ty: sem_ty, is_mut: false }));
+                    match pattern {
+                        Pattern::Ident(p) => {
+                            scope.insert(p.name.clone(), SymbolEntry::Var(VarInfo { ty: sem_ty, is_mut: p.is_mut }));
+                        }
+                        Pattern::Tuple(t) => {
+                            for elem in &t.elements {
+                                if let Pattern::Ident(p) = elem {
+                                    scope.insert(p.name.clone(), SymbolEntry::Var(VarInfo { ty: None, is_mut: false }));
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
                 }
                 Stmt::Expr(e) => {
                     self.resolve_expr(e, scope, global);

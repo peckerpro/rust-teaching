@@ -2,7 +2,7 @@ use rt_common::span::{BytePos, SourceFile};
 use std::sync::Arc;
 
 pub struct Cursor<'a> {
-    src: &'a str,
+    pub(crate) src: &'a str,
     pos: usize,
     pub file: Arc<SourceFile>,
 }

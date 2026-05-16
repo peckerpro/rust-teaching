@@ -145,12 +145,25 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
             match stmt {
                 Stmt::Let { pattern, init, .. } => {
                     let val = init.as_ref().and_then(|e| self.codegen_expr(e));
-                    let name = match pattern {
-                        rt_ast::pattern::Pattern::Ident(p) => p.name.clone(),
-                        _ => String::new(),
-                    };
-                    if let Some(v) = val {
-                        self.ctx.values.insert(name, v);
+                    match pattern {
+                        rt_ast::pattern::Pattern::Ident(p) => {
+                            if let Some(v) = val {
+                                self.ctx.values.insert(p.name.clone(), v);
+                            }
+                        }
+                        rt_ast::pattern::Pattern::Tuple(t) => {
+                            for (i, elem) in t.elements.iter().enumerate() {
+                                if let rt_ast::pattern::Pattern::Ident(p) = elem {
+                                    if let Some(BasicValueEnum::StructValue(sv)) = val {
+                                        let field = self.ctx.builder.build_extract_value(
+                                            sv, i as u32, &p.name
+                                        ).unwrap();
+                                        self.ctx.values.insert(p.name.clone(), field);
+                                    }
+                                }
+                            }
+                        }
+                        _ => {}
                     }
                 }
                 Stmt::Expr(e) => {

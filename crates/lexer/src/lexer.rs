@@ -45,6 +45,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_number(&mut self, start: usize) -> Token {
+        let started_with_dot = self.cursor.src.as_bytes().get(start).map_or(false, |b| *b == b'.');
         if self.cursor.peek() == Some(b'x') {
             self.cursor.advance();
             self.cursor.eat_while(|b| b.is_ascii_hexdigit() || b == b'_');
@@ -58,22 +59,29 @@ impl<'a> Lexer<'a> {
             self.cursor.eat_while(|b| b.is_ascii_digit() || b == b'_');
         }
 
-        let is_float = self.cursor.peek() == Some(b'.')
-            && self.cursor.peek_n(1) != Some(b'.');
+        let is_float = started_with_dot || (self.cursor.peek() == Some(b'.')
+            && self.cursor.peek_n(1) != Some(b'.'));
 
-        if is_float {
-            self.cursor.advance();
+        if is_float && !started_with_dot {
+            self.cursor.advance(); // skip the '.' for 3.14 style
             self.cursor.eat_while(|b| b.is_ascii_digit() || b == b'_');
             if self.cursor.peek().map_or(false, |b| b == b'e' || b == b'E') {
                 self.cursor.advance();
                 let _ = self.cursor.eat_byte(b'+') || self.cursor.eat_byte(b'-');
                 self.cursor.eat_while(|b| b.is_ascii_digit() || b == b'_');
             }
-            // parse float suffix (f32, f64)
+            self.cursor.eat_while(|b| b.is_ascii_alphanumeric() || b == b'_');
+            Token::new(TokenKind::Float, self.span(start))
+        } else if is_float {
+            // .5 style: already consumed the dot, just parse digits + exp
+            if self.cursor.peek().map_or(false, |b| b == b'e' || b == b'E') {
+                self.cursor.advance();
+                let _ = self.cursor.eat_byte(b'+') || self.cursor.eat_byte(b'-');
+                self.cursor.eat_while(|b| b.is_ascii_digit() || b == b'_');
+            }
             self.cursor.eat_while(|b| b.is_ascii_alphanumeric() || b == b'_');
             Token::new(TokenKind::Float, self.span(start))
         } else {
-            // parse integer suffix (i8, i16, i32, i64, i128, u8, u16, u32, u64, u128, isize, usize)
             self.cursor.eat_while(|b| b.is_ascii_alphanumeric() || b == b'_');
             Token::new(TokenKind::Integer, self.span(start))
         }
@@ -304,7 +312,15 @@ impl<'a> Iterator for Lexer<'a> {
                         .peek()
                         .map_or(false, |c| c.is_ascii_digit())
                     {
-                        self.lex_number(start)
+                        let prev_is_ident = start > 0 && {
+                            let prev = self.cursor.src.as_bytes()[start - 1];
+                            prev.is_ascii_alphanumeric() || prev == b'_' || prev == b')' || prev == b']'
+                        };
+                        if prev_is_ident {
+                            Token::new(TokenKind::Dot, self.span(start))
+                        } else {
+                            self.lex_number(start)
+                        }
                     } else {
                         Token::new(TokenKind::Dot, self.span(start))
                     }
