@@ -1236,7 +1236,17 @@ impl<'a> Parser<'a> {
     }
 
     fn lexer_slice(&self, tok: &Token) -> String {
-        self.file.src[tok.span.lo.to_usize()..tok.span.hi.to_usize()].to_string()
+        let lo = tok.span.lo.to_usize();
+        let hi = tok.span.hi.to_usize();
+        if lo < self.file.src.len() && hi <= self.file.src.len() && lo <= hi {
+            if self.file.src.is_char_boundary(lo) && self.file.src.is_char_boundary(hi) {
+                self.file.src[lo..hi].to_string()
+            } else {
+                String::new()
+            }
+        } else {
+            String::new()
+        }
     }
 
     fn peek_type_start(&self, tok: &Token) -> Option<()> {
