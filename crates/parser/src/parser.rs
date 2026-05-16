@@ -909,10 +909,12 @@ impl<'a> Parser<'a> {
             TokenKind::KwContinue => Expr::Continue(tok.span),
             TokenKind::OrOr => {
                 let lo = tok.span;
+                let ret_ty = if self.eat(TokenKind::RArrow) { Some(Box::new(self.parse_ty())) } else { None };
                 let body = self.parse_expr();
                 Expr::Closure(ClosureExpr {
                     params: vec![],
                     body: Box::new(body),
+                    ret_ty,
                     is_move: false,
                     span: lo.to(self.peek_tok().map_or(lo, |t| t.span)),
                 })
@@ -927,9 +929,10 @@ impl<'a> Parser<'a> {
                     if !self.eat(TokenKind::Comma) { break; }
                 }
                 self.expect(TokenKind::Or);
+                let ret_ty = if self.eat(TokenKind::RArrow) { Some(Box::new(self.parse_ty())) } else { None };
                 let body = self.parse_expr();
                 Expr::Closure(ClosureExpr {
-                    params, body: Box::new(body), is_move: false,
+                    params, body: Box::new(body), ret_ty, is_move: false,
                     span: lo.to(self.peek_tok().map_or(lo, |t| t.span)),
                 })
             }
@@ -944,9 +947,10 @@ impl<'a> Parser<'a> {
                     if !self.eat(TokenKind::Comma) { break; }
                 }
                 self.expect(TokenKind::Or);
+                let ret_ty = if self.eat(TokenKind::RArrow) { Some(Box::new(self.parse_ty())) } else { None };
                 let body = self.parse_expr();
                 Expr::Closure(ClosureExpr {
-                    params, body: Box::new(body), is_move: true,
+                    params, body: Box::new(body), ret_ty, is_move: true,
                     span: lo.to(self.peek_tok().map_or(lo, |t| t.span)),
                 })
             }

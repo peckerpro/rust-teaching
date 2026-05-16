@@ -246,6 +246,7 @@ pub struct AssignExpr {
 pub struct ClosureExpr {
     pub params: Vec<(Pattern, Option<Ty>)>,
     pub body: Box<Expr>,
+    pub ret_ty: Option<Box<Ty>>,
     pub is_move: bool,
     pub span: Span,
 }
