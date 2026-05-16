@@ -62,6 +62,7 @@ impl<'a> NameResolver<'a> {
         scope.insert("Some".into(), SymbolEntry::Fn(FnInfo { params: vec![SemTy::Infer], ret: Some(SemTy::Infer), generics: vec![] }));
         scope.insert("None".into(), SymbolEntry::Fn(FnInfo { params: vec![], ret: Some(SemTy::Infer), generics: vec![] }));
         scope.insert("println".into(), SymbolEntry::Fn(FnInfo { params: vec![SemTy::Infer], ret: Some(SemTy::Unit), generics: vec![] }));
+        scope.insert("String::from".into(), SymbolEntry::Fn(FnInfo { params: vec![SemTy::Str], ret: Some(SemTy::String), generics: vec![] }));
 
         for item in items {
             self.resolve_item(item, &mut scope, &self.scope.clone());
@@ -319,6 +320,13 @@ impl<'a> NameResolver<'a> {
                 self.resolve_expr(&c.func, scope, global);
                 for arg in &c.args {
                     self.resolve_expr(arg, scope, global);
+                }
+                // Register built-in paths like String::from
+                if let Expr::Path(path) = c.func.as_ref() {
+                    if path.segments.len() == 2 {
+                        let full_name = format!("{}::{}", path.segments[0].name, path.segments[1].name);
+                        scope.insert(full_name, SymbolEntry::Fn(FnInfo { params: vec![], ret: None, generics: vec![] }));
+                    }
                 }
             }
             Expr::If(if_expr) => {

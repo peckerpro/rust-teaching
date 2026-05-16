@@ -15,6 +15,7 @@ pub struct CodegenContext<'ctx> {
     pub values: HashMap<String, BasicValueEnum<'ctx>>,
     pub loop_stack: Vec<(BasicBlock<'ctx>, BasicBlock<'ctx>)>,
     pub struct_types: HashMap<String, (StructType<'ctx>, Vec<String>)>,
+    pub enum_types: HashMap<String, (StructType<'ctx>, Vec<(String, Option<Vec<BasicTypeEnum<'ctx>>>)>)>,
     pub generic_templates: HashMap<String, AstFnItem>,
 }
 
@@ -29,6 +30,7 @@ impl<'ctx> CodegenContext<'ctx> {
             values: HashMap::new(),
             loop_stack: Vec::new(),
             struct_types: HashMap::new(),
+            enum_types: HashMap::new(),
             generic_templates: HashMap::new(),
         }
     }
@@ -62,6 +64,7 @@ impl<'ctx> CodegenContext<'ctx> {
             SemTy::F64 => self.context.f64_type().into(),
             SemTy::Bool => self.context.bool_type().into(),
             SemTy::Char => self.context.i8_type().into(),
+            SemTy::Str | SemTy::String => self.context.i8_type().ptr_type(inkwell::AddressSpace::default()).into(),
             SemTy::Unit => self.context.struct_type(&[], false).into(),
             SemTy::Ref(inner) => {
                 let inner_ty = self.sem_ty_to_llvm(&inner.inner);

@@ -17,6 +17,7 @@ pub enum SemTy {
     Bool,
     Char,
     Str,
+    String,
     Unit,
     Never,
     Infer,
@@ -50,6 +51,7 @@ impl SemTy {
             "bool" => Some(SemTy::Bool),
             "char" => Some(SemTy::Char),
             "str" => Some(SemTy::Str),
+            "String" => Some(SemTy::String),
             "()" | "Unit" => Some(SemTy::Unit),
             _ => None,
         }
@@ -103,6 +105,7 @@ impl SemTy {
             SemTy::Bool => "bool",
             SemTy::Char => "char",
             SemTy::Str => "str",
+            SemTy::String => "String",
             SemTy::Unit => "()",
             SemTy::Never => "!",
             SemTy::Infer => "_",

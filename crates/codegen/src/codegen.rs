@@ -1,5 +1,5 @@
 use inkwell::{
-    types::BasicType,
+    types::{BasicType, BasicTypeEnum},
     values::BasicValueEnum,
     FloatPredicate,
     IntPredicate,
@@ -55,15 +55,29 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                     self.ctx.declare_struct(&struct_item.name, &fields);
                 }
             }
-            Item::Impl(impl_item) => {
-                for method in &impl_item.items {
-                    if let ImplItemKind::Fn(fn_item) = method {
-                        if fn_item.generics.is_some() {
-                            self.ctx.generic_templates.insert(fn_item.name.clone(), fn_item.clone());
-                        } else {
-                            self.codegen_fn(fn_item);
-                        }
+            Item::Enum(enum_item) => {
+                let mut variant_tys: Vec<(String, Option<Vec<BasicTypeEnum>>)> = Vec::new();
+                for variant in &enum_item.variants {
+                    let field_tys: Option<Vec<BasicTypeEnum>> = variant.fields.as_ref().map(|tys| {
+                        tys.iter().map(|t| self.ast_ty_to_sem(t)).map(|s| self.ctx.sem_ty_to_llvm(&s)).collect()
+                    });
+                    variant_tys.push((variant.name.clone(), field_tys));
+                }
+                // Store enum info for match codegen
+                let i64_t = self.ctx.context.i64_type().into();
+                let mut all_fields = vec![i64_t]; // tag field
+                for (_, fields) in &variant_tys {
+                    if let Some(fts) = fields {
+                        all_fields.extend(fts.iter().copied());
                     }
+                }
+                if let Some(st) = self.ctx.context.get_struct_type(&enum_item.name) {
+                    st.set_body(&all_fields, false);
+                    self.ctx.enum_types.insert(enum_item.name.clone(), (st, variant_tys));
+                } else {
+                    let st = self.ctx.context.opaque_struct_type(&enum_item.name);
+                    st.set_body(&all_fields, false);
+                    self.ctx.enum_types.insert(enum_item.name.clone(), (st, variant_tys));
                 }
             }
             _ => {}
@@ -283,8 +297,15 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                 }
             }
             Expr::Call(call) => {
-                if let Expr::Ident(ident) = call.func.as_ref() {
-                    if let Some(func) = self.ctx.module.get_function(&ident.name) {
+                let func_name = match call.func.as_ref() {
+                    Expr::Ident(ident) => Some(ident.name.clone()),
+                    Expr::Path(path) if path.segments.len() == 2 => {
+                        Some(format!("{}::{}", path.segments[0].name, path.segments[1].name))
+                    }
+                    _ => None,
+                };
+                if let Some(fname) = func_name.clone() {
+                    if let Some(func) = self.ctx.module.get_function(&fname) {
                         let args: Vec<_> = call.args.iter()
                             .filter_map(|a| self.codegen_expr(a).and_then(|v| {
                                 match v {
@@ -298,7 +319,7 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                         if let Ok(result) = self.ctx.builder.build_call(func, &args, "call") {
                             return result.try_as_basic_value().left();
                         }
-                    } else if self.ctx.generic_templates.contains_key(&ident.name) {
+                    } else if self.ctx.generic_templates.contains_key(&fname) {
                         let arg_types: Vec<SemTy> = call.args.iter()
                             .map(|a| {
                                 match self.codegen_expr(a) {
@@ -310,8 +331,8 @@ impl<'a, 'ctx> Codegen<'a, 'ctx> {
                             .collect();
                         let concrete_ty = &arg_types[0];
 
-                        let template = self.ctx.generic_templates.get(&ident.name).unwrap().clone();
-                        let mangled = format!("{}_{}", ident.name, concrete_ty.name());
+                        let template = self.ctx.generic_templates.get(&fname).unwrap().clone();
+                        let mangled = format!("{}_{}", fname, concrete_ty.name());
                         if self.ctx.module.get_function(&mangled).is_none() {
                             // Generate monomorphized version
                             self.codegen_fn_mono(&template, concrete_ty, &mangled);
